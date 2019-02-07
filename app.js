@@ -15,7 +15,8 @@ useMongoClient: true
 
 const isProduction = process.env.NODE_ENV === 'production';
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT ||process.env.OPENSHIFT_NODEJS_PORT || 8080|| 3000;
+const server_ip_address = process.env.OPENSHIFT_NODEJS_IP || '127.0.0.1'
 app.use(cors());
 app.use(require('morgan')('dev'));
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -65,4 +66,4 @@ app.use((err, req, res) => {
 
 
 
-const server = app.listen(PORT, () => console.log(`Locality is running on port :${PORT}`));
+const server = app.listen(PORT,server_ip_address, () => console.log(`Locality is running on port :${PORT}`));
