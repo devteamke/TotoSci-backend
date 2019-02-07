@@ -159,6 +159,7 @@ router.post('/single', passport.authenticate('jwt', { session: false }), (req, r
                             PostLike.countDocuments({post_id:post._id})
                                     .then((count)=>{
                                         post.likes = count;
+                                       
                                         res.json({post:post,success:true})
                                     })
                            
@@ -176,7 +177,7 @@ router.post('/comments', passport.authenticate('jwt', { session: false }), (req,
   const { user } =req;
   let user_r =user;
   return Comments.find({post_id:body._id})
-                 .sort({createdAt:-1})
+                 .sort({createdAt:1})
                  .then((comments) =>{
                  
                  // console.log('[fetched comments]',comments)

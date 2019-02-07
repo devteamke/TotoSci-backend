@@ -23,6 +23,12 @@ PostsSchema.methods.toJSON = function() {
     image:this.image,
     rating:this.rating,
     body:this.body,
+    likes:{type:Number,
+        default:0
+    },
+    comments:{type:Number,
+        default:0
+    },
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
     
