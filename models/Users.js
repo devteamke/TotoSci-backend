@@ -51,7 +51,11 @@ const UsersSchema = new Schema({
     password: {
         type: String,
         required: true
-    }
+    },
+    isSetUp:{ type:Boolean,
+            default:false,
+        
+    },
 }, { timestamps: true });
 
 UsersSchema.methods.toJSON = function() {
@@ -64,6 +68,7 @@ UsersSchema.methods.toJSON = function() {
     password:this.password,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
+    isSetUp:this.isSetUp
     
   };
 };

@@ -148,14 +148,14 @@ router.post('/register', (req, res, next) => {
                                     var neo_session = driver.session();
                                      neo_session
                                     .run(`CREATE (u:User {username:'${user.username}',_id:'${user._id}'}) RETURN u.username`)
-                                    .then(function(result) {
+                                    .then((result)=> {
                                         result.records.forEach(function(record) {
                                             console.log(record)
                                         });
                                 
-                                       neo_session.close();
+                                      neo_session.close();
                                     })
-                                    .catch(function(error) {
+                                    .catch((error)=> {
                                         console.log(error);
                                     });
                                     user = user.toObject();

@@ -5,8 +5,10 @@ const jwt = require('jsonwebtoken');
 const passport = require('passport');
 const Posts = mongoose.model('Posts');
 const Comments = mongoose.model('Comments');
+const Saved = mongoose.model('Saved');
 const PostLike = mongoose.model('PostLike');
 const Users = mongoose.model('Users');
+const ObjectId = require('mongodb').ObjectID
 const driver = require('../../neo4j')
 //image upload
 const multer                = require('multer');
@@ -112,6 +114,28 @@ router.get('/all', passport.authenticate('jwt', { session: false }),(req, res, n
     .then((posts) => res.json({ posts: posts.map(user=> user.toJSON()),success:true }))
     .catch(next);
 });
+/*returns all saved posts */
+router.get('/saved_posts', passport.authenticate('jwt', { session: false }),(req, res, next) => {
+    const { user } =req;
+  return Saved.find({user_id:user._id})
+    .sort({ createdAt: 'descending' })
+    .then((saved)=>{
+        let ids =[];
+        saved.map((each)=>{
+         var myObjectId = mongoose.Types.ObjectId(each.post_id);
+         console.log(myObjectId)
+            ids.push(myObjectId)
+        })
+        console.log('[ids]', ids )
+        Posts.find({ _id: { $in:ids } })
+             .then((posts)=>{
+                 console.log('[posts]',posts)
+                 res.json({ posts: posts.map(user=> user.toJSON()),success:true })
+             })
+       
+    })
+    .catch(next);
+});
 /*saves like  */
 router.post('/save_like', passport.authenticate('jwt', { session: false }),(req, res, next) => {
    const { body } = req;
@@ -129,6 +153,28 @@ router.post('/save_like', passport.authenticate('jwt', { session: false }),(req,
          PostLike.create({user_id:user._id,post_id:body.post_id})
                  .then((newLike)=>{
                      console.log('[saved like]',newLike)
+                      return res.json({success:true})
+                 })
+        
+    }
+});
+/*saves post  */
+router.post('/save_post', passport.authenticate('jwt', { session: false }),(req, res, next) => {
+   const { body } = req;
+   const { user } =req;
+   console.log('[data from app]',body)
+    
+    if(body.saved){
+        Saved.remove({user_id:user._id,post_id:body.post_id})
+                .then((data)=>{
+                    // console.log(data)
+                     return res.json({success:true})
+                })
+        
+    }else if (!body.saved){
+         Saved.create({user_id:user._id, type:'post',post_id:body.post_id})
+                 .then((saved)=>{
+                     console.log('[saved post]',saved)
                       return res.json({success:true})
                  })
         
@@ -159,8 +205,17 @@ router.post('/single', passport.authenticate('jwt', { session: false }), (req, r
                             PostLike.countDocuments({post_id:post._id})
                                     .then((count)=>{
                                         post.likes = count;
+                                       Saved.find({post_id:post._id})
+                                       .then((saved)=>{
+                                           
+                                           if(saved.length>0){
+                                               post.saved=true
+                                           }else if(saved.length==0){
+                                               post.saved= false
+                                           }
+                                            res.json({post:post,success:true})
+                                       })
                                        
-                                        res.json({post:post,success:true})
                                     })
                            
                       })
