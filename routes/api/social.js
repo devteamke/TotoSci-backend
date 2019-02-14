@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const passport = require('passport');
 const Posts = mongoose.model('Posts');
+const Places = mongoose.model('Places');
 const Comments = mongoose.model('Comments');
 const Saved = mongoose.model('Saved');
 const PostLike = mongoose.model('PostLike');
@@ -179,6 +180,33 @@ router.post('/save_post', passport.authenticate('jwt', { session: false }),(req,
                  })
         
     }
+});
+/*saves place(also register) */
+router.post('/save_place', passport.authenticate('jwt', { session: false }),(req, res, next) => {
+   const { body } = req;
+   const { user } =req;
+   console.log('[data from app]',body)
+   Places.findOne({place_id:body._id})
+         .then((place)=>{
+             console.log('[place from db]', place)
+             if(place==null){
+                 //save p[lace]
+                 Places.create({place_id:body._id, name:body.name, location:body.location, phone_number:body.phone_number, photos:body.photos, rating:body.rating, vicinity:body.vicinity})
+                       .then((newPlace)=>{
+                           console.log('[saved place]', newPlace)
+                           
+                       })
+                       .catch((err)=>console.log(err))
+               //create relation btw current user and place
+             }else if(place!==null){
+                 //dont save
+                   //merge relation btw current user and place
+                 
+             }
+         })
+         .catch((err)=>console.log(err))
+    
+
 });
 /*single post  */
 router.post('/single', passport.authenticate('jwt', { session: false }), (req, res, next) => {

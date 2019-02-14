@@ -41,6 +41,7 @@ router.post('/login', (req, res, next) => {
                                 username: user.username,
                                 role: user.role,
                                 email:user.email,
+                                 isSetUp:user.isSetUp,
                             }
                             jwt.sign(payload, 'secret', {
                                 expiresIn: 90000
@@ -165,6 +166,7 @@ router.post('/register', (req, res, next) => {
                                         username: user.username,
                                         role: user.role,
                                         email:user.email,
+                                        isSetUp:user.isSetUp,
                                     }
                                     jwt.sign(payload, 'secret', {
                                         expiresIn:90000
