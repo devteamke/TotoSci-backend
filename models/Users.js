@@ -56,6 +56,9 @@ const UsersSchema = new Schema({
             default:false,
         
     },
+    interests:{
+        type:Array
+    }
 }, { timestamps: true });
 
 UsersSchema.methods.toJSON = function() {
@@ -66,9 +69,11 @@ UsersSchema.methods.toJSON = function() {
     role:this.role,
     status:this.status,
     password:this.password,
+    isSetUp:this.isSetUp,
+    interests:this.interests,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
-    isSetUp:this.isSetUp
+ 
     
   };
 };

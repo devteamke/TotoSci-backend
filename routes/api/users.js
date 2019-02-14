@@ -43,7 +43,7 @@ router.post('/login', (req, res, next) => {
                                 email:user.email,
                             }
                             jwt.sign(payload, 'secret', {
-                                expiresIn: 3600*5*5
+                                expiresIn: 90000
                             }, (err, token) => {
                                 if(err) console.error('There is some error in token', err);
                                 else {
@@ -160,14 +160,14 @@ router.post('/register', (req, res, next) => {
                                     });
                                     user = user.toObject();
                                     delete user.password
-                                    const payload = {
-                                      _id: user.id,
-                                      username: user.username,
-                                      email:user.email,
-                                      createdAt:user.createdAt
+                                      const payload = {
+                                        id: user._id,
+                                        username: user.username,
+                                        role: user.role,
+                                        email:user.email,
                                     }
                                     jwt.sign(payload, 'secret', {
-                                        expiresIn:3600*5*5
+                                        expiresIn:90000
                                     }, (err, token) => {
                                         if(err) console.error('There is some error in token', err);
                                         else {
@@ -214,6 +214,23 @@ router.post('/update_profile', passport.authenticate('jwt', { session: false }),
     const { body } = req;
     console.log('[data of request]', req.body)
    User.findOneAndUpdate({_id:req.user.id},{email:body.email,fname:body.fname,lname:body.lname,phone_number:body.phone_number}, {new: true})
+       .then((user)=>{
+        user = user.toObject()
+        delete user.password;
+        delete user.updatedAt;
+        delete user.__v;
+        delete user.role;
+         console.log(user)
+         res.json({success:true,message:'Query successful', user:user})
+       })
+       .catch((err)=>{
+         console.log(err)
+       })
+});
+router.post('/save_interests', passport.authenticate('jwt', { session: false }), (req, res) => {
+    const { body } = req;
+    console.log('[data of request]', req.body)
+   User.findOneAndUpdate({_id:req.user.id},{interests:body.interests, isSetUp:true}, {new: true})
        .then((user)=>{
         user = user.toObject()
         delete user.password;
