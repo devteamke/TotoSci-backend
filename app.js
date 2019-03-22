@@ -28,6 +28,7 @@ const passport = require('passport');
 // require('./models/Orders');
 require('./models/Comments');
 require('./models/PostLikes');
+require('./models/PlaceLikes');
 require('./models/Places')
 require('./models/Saved');
 require('./models/Posts');

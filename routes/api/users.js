@@ -41,7 +41,7 @@ router.post('/login', (req, res, next) => {
                                 username: user.username,
                                 role: user.role,
                                 email:user.email,
-                                 isSetUp:user.isSetUp,
+                                isSetUp:user.isSetUp,
                             }
                             jwt.sign(payload, 'secret', {
                                 expiresIn: 90000
@@ -231,21 +231,77 @@ router.post('/update_profile', passport.authenticate('jwt', { session: false }),
 });
 router.post('/save_interests', passport.authenticate('jwt', { session: false }), (req, res) => {
     const { body } = req;
+    const { user } = req;
+    const { items } =req.body;
     console.log('[data of request]', req.body)
+   
+     const keys =  Object.keys(items)
+     const values = Object.values(items)
+      console.log('[keys]', Object.keys(items))
+      console.log('[values]', Object.values(items))
+     let interests =[];
+    for(let i=0;i<keys.length;i++){
+        console.log(i)
+        let toPush = {
+           interest:keys[i],
+           weight:values[i]
+         }
+       if(values[i]!==0){
+            interests.push(toPush);
+       }
+      
+    }
+    console.log('[interests]',interests)
+   
+   
+    const saveToGraph = () =>  {
+        let matchString="";
+        let createString ="";
+        let comma =',';
+        interests.map((interest, i)=>{
+            
+            if(i==interests.length-1){
+                comma=''
+            }
+            matchString+=`(i${i}:Interest {name:'${interest.interest}'})${comma}`
+            createString+=`((u)-[:LIKES {weight: ${interest.weight*2}}]->(i${i}))${comma}`;  
+            
+        })
+        console.log('[matchString]',matchString)
+        console.log('[createString]',createString)
+         var neo_session = driver.session();
+                                     neo_session
+                                    .run(`MATCH (u:User {_id: '${user._id}'}), ${matchString} CREATE ${createString} RETURN u`)
+                                    .then((result)=> {
+                                        result.records.forEach(function(record) {
+                                            console.log(record)
+                                        });
+                                
+                                      neo_session.close();
+                                    })
+                                    .catch((error)=> {
+                                        console.log(error);
+                                    }); 
+    }
+   
    User.findOneAndUpdate({_id:req.user.id},{interests:body.interests, isSetUp:true}, {new: true})
        .then((user)=>{
         user = user.toObject()
-        delete user.password;
-        delete user.updatedAt;
-        delete user.__v;
-        delete user.role;
+         delete user.password;
+         delete user.updatedAt;
+         delete user.__v;
+         delete user.role;
          console.log(user)
+         saveToGraph();
          res.json({success:true,message:'Query successful', user:user})
+               
+    
        })
        .catch((err)=>{
          console.log(err)
        })
 });
+
 router.post('/update_password', passport.authenticate('jwt', { session: false }), (req, res) => {
     const { body } = req;
     const { user } = req;
@@ -289,7 +345,36 @@ router.post('/update_password', passport.authenticate('jwt', { session: false })
   
  
 });
+
+router.post('/new_token',passport.authenticate('jwt',{session:false}),(req,res,next)=>{
+    const { user } = req;
+    const { body } = req;
+    console.log('[user in new token request]');
+    
+              const payload = {
+                                id: user.id,
+                                username: user.username,
+                                role: user.role,
+                                email:user.email,
+                                isSetUp:user.isSetUp,
+                            }
+                            jwt.sign(payload, 'secret', {
+                                expiresIn: 90000
+                            }, (err, token) => {
+                                if(err) console.error('There is some error in token', err);
+                                else {
+                                    res.json({
+                                        success: true,
+                                        token: `Bearer ${token}`,
+                                        user_id:user._id,
+                                        message:'new token recieved'
+                                    });
+                                }
+                            });
+})
 /*returns all users */
+
+
 router.get('/all', (req, res, next) => {
   return User.find()
     .sort({ createdAt: 'descending' })
@@ -320,6 +405,7 @@ router.get('/:id', (req, res, next) => {
     user: req.user.toJSON(),
   });
 });
+
 
 router.patch('/:id', (req, res, next) => {
   const { body } = req;
