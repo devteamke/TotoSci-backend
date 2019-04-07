@@ -33,6 +33,7 @@ require('./models/Places')
 require('./models/Saved');
 require('./models/Posts');
 require('./models/Users');
+require('./models/Review');
 require('./passport')(passport);
 // Add routes
 app.use(require('./routes'));

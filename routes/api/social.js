@@ -7,6 +7,7 @@ const Posts = mongoose.model('Posts');
 const Places = mongoose.model('Places');
 const Comments = mongoose.model('Comments');
 const Saved = mongoose.model('Saved');
+const Review = mongoose.model('Review');
 const PostLike = mongoose.model('PostLike');
 const PlaceLike = mongoose.model('PlaceLike');
 const Users = mongoose.model('Users');
@@ -233,11 +234,11 @@ router.post('/like_save_check', passport.authenticate('jwt', { session: false })
                      .then((foundLiked)=>{
                                   var neo_session = driver.session();
                                      neo_session
-                                    .run(`MATCH (p:Place {_id:'${body.place_id}' }), (u:User {_id:'${user._id}' }) MERGE (u)-[r:LIKES ]->(p)  ON CREATE SET r.weight = 10 ON MATCH SET r.weight = r.weight + 1 RETURN r`)
+                                    .run(`MATCH (p:Place {_id:'${body.place_id}' }), (u:User {_id:'${user._id}' }) MERGE (u)-[r:LIKES ]->(p)  ON CREATE SET r.weight = 1 ON MATCH SET r.weight = r.weight + 1 RETURN r`)
                                     .then((result)=> {
                                         result.records.forEach(function(record) {
-                                            console.log(record)
-                                            console.log(record._fields[0])
+                                            // console.log(record)
+                                            // console.log(record._fields[0])
                                         });
                                 
                                       neo_session.close();
@@ -245,7 +246,7 @@ router.post('/like_save_check', passport.authenticate('jwt', { session: false })
                                     .catch((error)=> {
                                         console.log(error);
                                     }); 
-                        console.log('[found liked]',foundLiked)
+                        //console.log('[found liked]',foundLiked)
                         let liked= null;
                         let saved = null;
                         if(foundSaved==null){
@@ -258,7 +259,15 @@ router.post('/like_save_check', passport.authenticate('jwt', { session: false })
                         }else{
                             liked = true
                         }
-                        res.json({success:true,liked:liked, saved:saved})
+                        Review.find({place_id:body.place_id}).sort({createdAt:-1})
+                              .then(reviews=>{
+                                   res.json({success:true,liked:liked, saved:saved, reviews:reviews})
+                              })
+                              .catch(err=>{
+                                  console.log(err);
+                              })
+                              
+                       
                      })
                      .catch((err)=>console.log(err))
         })  
@@ -298,7 +307,20 @@ router.post('/save_like_place', passport.authenticate('jwt', { session: false })
          PlaceLike.create({user_id:user._id,place_id:body.place_id})
                  .then((newLike)=>{
                      console.log('[saved like]',newLike)
-           
+                        var neo_session = driver.session();
+                                     neo_session
+                                    .run(`MATCH (p:Place {_id:'${body.place_id}' }), (u:User {_id:'${user._id}' }) MERGE (u)-[r:LIKES ]->(p) ON CREATE SET   r.weight = 10  ON MATCH SET r.weight = r.weight + 10 RETURN r`)
+                                    .then((result)=> {
+                                        result.records.forEach(function(record) {
+                                            console.log(record)
+                                            console.log(record._fields[0])
+                                        });
+                                
+                                      neo_session.close();
+                                    })
+                                    .catch((error)=> {
+                                        console.log(error);
+                                    });
                      res.json({success:true})
                     
                              
@@ -311,7 +333,7 @@ router.post('/save_place_user', passport.authenticate('jwt', { session: false })
    const { body } = req;
    const { user } =req;
    console.log('[data from app]',body)
-    
+
     if(body.saved){
         Saved.remove({user_id:user._id,place_id:body.place_id})
                 .then((data)=>{
@@ -322,7 +344,7 @@ router.post('/save_place_user', passport.authenticate('jwt', { session: false })
     }else if (!body.saved){
          Saved.create({user_id:user._id, type:'place',place_id:body.place_id})
                  .then((saved)=>{
-                     console.log('[saved place]',saved)
+                   //  console.log('[saved place]',saved)
                       return res.json({success:true})
                  })
         
@@ -332,7 +354,8 @@ router.post('/save_place_user', passport.authenticate('jwt', { session: false })
 router.post('/save_place', passport.authenticate('jwt', { session: false }),(req, res, next) => {
    const { body } = req;
    const { user } =req;
-   //console.log('[data from app]',body)
+  //console.log('[data from app]',body)
+      return res.json({success:true});
    Places.findOne({place_id:body._id})
          .then((place)=>{
            //  console.log('[place from db]', place)
@@ -363,20 +386,20 @@ router.post('/save_place', passport.authenticate('jwt', { session: false }),(req
              }else if(place!==null){
                  //dont save
                    //merge relation btw current user and place
-                      var neo_session = driver.session();
-                                     neo_session
-                                    .run(`MATCH (p:Place {_id:'${place.place_id}' }), (u:User {_id:'${user._id}' }) MERGE (u)-[r:LIKES ]->(p)  ON  MATCH SET r.weight = r.weight + 1 RETURN r`)
-                                    .then((result)=> {
-                                        result.records.forEach(function(record) {
-                                            console.log(record)
-                                            console.log(record._fields[0])
-                                        });
+                    //   var neo_session = driver.session();
+                    //                  neo_session
+                    //                 .run(`MATCH (p:Place {_id:'${place.place_id}' }), (u:User {_id:'${user._id}' }) MERGE (u)-[r:LIKES ]->(p) ON CREATE SET r.weight=1 ON  MATCH SET r.weight = r.weight + 1 RETURN r`)
+                    //                 .then((result)=> {
+                    //                     result.records.forEach(function(record) {
+                    //                         console.log(record)
+                    //                         console.log(record._fields[0])
+                    //                     });
                                 
-                                      neo_session.close();
-                                    })
-                                    .catch((error)=> {
-                                        console.log(error);
-                                    });
+                    //                   neo_session.close();
+                    //                 })
+                    //                 .catch((error)=> {
+                    //                     console.log(error);
+                    //                 });
                  res.json({success:true})
              }
          })
@@ -471,7 +494,23 @@ router.post('/save_comment', passport.authenticate('jwt', { session: false }),(r
         
 
 });
-
+/*saves review*/
+router.post('/new_review', passport.authenticate('jwt', { session: false }),(req, res, next) => {
+    console.log('[data]', req.body);
+    const { user } = req;
+    const { body } = req;
+    
+    Review.create({user_id:user._id,username:user.username,  place_id:body.place_id, rating:body.rating, review:body.body})
+           .then((review)=>{
+               console.log('[created review]', review);
+               res.json({success:true})
+           })
+           .catch((err)=>{
+               console.log(err);
+               res.json({success:false, msg:err.msg})
+           })
+            
+})
 //get recommendations
 /* recommendations from interest algorithm -> gets similary users
 MATCH (p2:User)-[likes2:LIKES]->(i1:Interest) WHERE p2 <> p1
@@ -480,8 +519,8 @@ RETURN p1.username AS from,
        likes1.weight AS fromWeight,
        likes2.weight AS toWeight,
        algo.similarity.euclideanDistance(collect(likes1.weight), collect(likes2.weight)) AS similarity */
-
-router.post('/get_recommendations', passport.authenticate('jwt',{ session:false }), (req,res,next)=>{
+//From interests
+router.get('/get_recommendations', passport.authenticate('jwt',{ session:false }), (req,res,next)=>{
     const { user } = req;
         let crunch  = (similar) => {
             console.log('[similar used to loop]',similar)
@@ -522,7 +561,9 @@ router.post('/get_recommendations', passport.authenticate('jwt',{ session:false 
                                                 username:record._fields[1],
                                                 similarity:record._fields[4]
                                             }
-                                            similar.push(each)
+                                            if(each.similarity>0){
+                                                similar.push(each)
+                                            }
                                             if(i== result.records.length -1){
                                                 resolve();
                                             }
@@ -534,17 +575,18 @@ router.post('/get_recommendations', passport.authenticate('jwt',{ session:false 
                                         // console.log(cypher)
                                          neo_session.close();
                                        let recommendations = [];
-                                       top.map(async(each,i)=>{
+                                     //  let topMap = new Promise ((resolve)=>{
+                                     await Promise.all(  top.map(async(each,i)=>{
                                             let prom= new Promise((resolve, reject)=>{
-                                                 
+                                                            console.log(`[QUERY] MATCH (p:User {username: '${each.username}'})-[:LIKES]->(pl:Place) WHERE NOT (:User {username:'${user.username}'})-[:LIKES]->(pl) RETURN pl`)
                                                           let neo_session2 = driver.session();
                                                             neo_session2
-                                                            .run(`MATCH (p$:User {username: '${each.username}'})-[:LIKES]->(pl:Place) RETURN pl`)
+                                                            .run(`MATCH (p:User {username: '${each.username}'})-[:LIKES]->(pl:Place) WHERE NOT (:User {username:'${user.username}'})-[:LIKES]->(pl) RETURN pl`)
                                                             .then(async(result2)=> {
                                                                       neo_session2.close();
                                                                         let prom2= new Promise((resolve, reject)=>{
                                                                            result2.records.forEach((record2,i) =>{
-                                                                                       console.log('[each record]',  record2._fields)
+                                                                                      // console.log('[each record]',  record2._fields)
                                                                                              let each2=record2._fields[0].properties;
                                                                                            
                                                                                             recommendations.push(each2)
@@ -552,8 +594,11 @@ router.post('/get_recommendations', passport.authenticate('jwt',{ session:false 
                                                                                             if(i == result2.records.length-1){
                                                                                                 resolve()
                                                                                             }
-                                                                                        
+                                                                                       
                                                                                     });
+                                                                                     setTimeout(()=>{
+                                                                                            resolve()
+                                                                                        },4000)
                                                                         })
                                                                         await prom2;
                                                                                
@@ -570,20 +615,148 @@ router.post('/get_recommendations', passport.authenticate('jwt',{ session:false 
                                                 
                                             })
                                                 await prom;
-                                            
-                                                console.log(i ,' vs ',  top.length)
-                                                console.log(i== top.length-1);
-                                                if(i== top.length-1){
-                                                       res.json({recommendations})
-                                                }
+                                                                                                                                                               
+                                              
                                        })
-                                    
+                                       
+                                       //})
+                                       )
+                                 //   await topMap;
+                                          let place_ids =[];
+                                            recommendations.map((each)=>{
+                                           
+                                                place_ids.push(each._id)
+                                            })
+                                            console.log('[place_ids]', place_ids )
+                                            Places.find({ place_id: { $in:place_ids } },{name:1,place_id:1,photos:{$slice: 1},vicinity:1})
+                                                 .then((places)=>{
+                                                     console.log('[places]',places)
+                                                     res.json({ places: places.map(place=> place.toJSON()),success:true })
+                                                 })
+                                    // res.json({recommendations})
                                     })
                                      .catch((error)=> {
                                                 console.log(error);
                                 }); 
 })
+//For a specific place interests
+router.post('/get_recommendations_p', passport.authenticate('jwt',{ session:false }), (req,res,next)=>{
+        const { user } = req;
+        const { body } = req;
+        console.log('[place_id]', body.place_id)
+        let crunch  = (similar) => {
+            console.log('[similar used to loop single place]',similar)
+            let top = []
+            similar.map((item,i)=>{
+                if(similar>=10){
+                    return ;
+                }
+              
+                    top.push(item)
+                if(i == similar.length-1){
+                 
+                    return ;
+                    
+                }
+                
+            });
+            
+            
+            return top;
+            
+        }
+        
+          let neo_session = driver.session();
+                                     neo_session
+                                    .run(`MATCH (p1:User {username: '${user.username}'})-[likes1:LIKES]->(pl1:Place {_id:'${body.place_id}'})
+                                            MATCH (p2:User)-[likes2:LIKES]->(pl1:Place {_id:'${body.place_id}'}) WHERE p2 <> p1
+                                            RETURN p1.username AS from,
+                                                   p2.username AS to,       
+                                                   likes1.weight AS fromWeight,
+                                                   likes2.weight AS toWeight,
+                                                   algo.similarity.euclideanDistance(collect(likes1.weight), collect(likes2.weight)) AS similarity `)
+                                    .then(async(result)=> {
+                                        let similar= []
+                                        let  simMap = new Promise((resolve,reject)=>{
+                                                  result.records.map((record,i)=> {
+                                           // console.log('[each record]',  record._fields)
+                                            let each = {
+                                                username:record._fields[1],
+                                                similarity:record._fields[4]
+                                            }
+                                            similar.push(each)
+                                            if(i== result.records.length -1){
+                                                resolve();
+                                            }
+                                        });
+                                        })
+                                        await simMap;
+                                        let top = crunch(similar);
+                                        // let cypher = createCypher(top)
+                                        // console.log(cypher)
+                                         neo_session.close();
+                                       let recommendations = [];
+                                                    await Promise.all(  top.map(async(each,i)=>{
+                                            let prom= new Promise((resolve, reject)=>{
+                                                            console.log(`[QUERY] MATCH (p:User {username: '${each.username}'})-[:LIKES]->(pl:Place) WHERE NOT (:User {username:'${user.username}'})-[:LIKES]->(pl) RETURN pl`)
+                                                          let neo_session2 = driver.session();
+                                                            neo_session2
+                                                            .run(`MATCH (p:User {username: '${each.username}'})-[:LIKES]->(pl:Place) WHERE NOT (:User {username:'${user.username}'})-[:LIKES]->(pl) RETURN pl`)
+                                                            .then(async(result2)=> {
+                                                                      neo_session2.close();
+                                                                        let prom2= new Promise((resolve, reject)=>{
+                                                                           result2.records.forEach((record2,i) =>{
+                                                                                     //  console.log('[each record]',  record2._fields)
+                                                                                             let each2=record2._fields[0].properties;
+                                                                                           
+                                                                                            recommendations.push(each2)
+                                                                                            console.log(i ,' vs ', result2.records.length-1)
+                                                                                            if(i == result2.records.length-1){
+                                                                                                resolve()
+                                                                                            }
+                                                                                        
+                                                                                    });
+                                                                                     setTimeout(()=>{
+                                                                                            resolve()
+                                                                                        },4000)
+                                                                        })
+                                                                        await prom2;
+                                                                               
+                                                                           
+                                                                           
+                                                                            resolve();
+                                                                    })
+                                                                    .catch((error)=> {
+                                                                        console.log(error);
+                                                                    }); 
+                                           
+                                             
+                                     
+                                                
+                                            })
+                                                await prom;
+                                                                                                                                                               
+                                              
+                                       })
+                                        )
+                                 //   await topMap;
+                                          let place_ids =[];
+                                            recommendations.map((each)=>{
+                                           
+                                                place_ids.push(each._id)
+                                            })
+                                            console.log('[place_ids]', place_ids )
+                                            Places.find({ place_id: { $in:place_ids } },{name:1,place_id:1,photos:{$slice: 1},vicinity:1})
+                                                 .then((places)=>{
+                                                     console.log('[places]',places)
+                                                     res.json({ places: places.map(place=> place.toJSON()),success:true })
+                                                 })
+                                    })
+                                     .catch((error)=> {
+                                                console.log(error);
+                                }); 
 
+})
 router.patch('/:id', (req, res, next) => {
   const { body } = req;
 

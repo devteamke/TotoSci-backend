@@ -4,7 +4,7 @@ const { Schema } = mongoose;
 
 const PlaceLikeSchema = new Schema({
  user_id:String,
- post_id:String,
+
  place_id:String,
 
  
