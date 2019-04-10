@@ -17,6 +17,9 @@ const isProduction = process.env.NODE_ENV === 'production';
 const app = express();
 const PORT = process.env.PORT || process.env.OPENSHIFT_NODEJS_PORT || 8080;
 const IP = process.env.IP   || process.env.OPENSHIFT_NODEJS_IP || '0.0.0.0';
+// set the view engine to ejs
+app.set('view engine', 'ejs');
+
 app.use(cors());
 app.use(require('morgan')('dev'));
 app.use(bodyParser.urlencoded({ extended: false }));

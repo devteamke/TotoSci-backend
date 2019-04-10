@@ -389,21 +389,25 @@ router.get('/all', (req, res, next) => {
 //     .catch(next);
 // });
 
-router.param('id', (req, res, next, id) => {
-  return User.findById(id, (err, user) => {
-    if(err) {
-      return res.sendStatus(404);
-    } else if(user) {
-      req.user = user;
-      return next();
-    }
-  }).catch(next);
-});
+// router.param('id', (req, res, next, id) => {
+//   return User.findById(id, (err, user) => {
+//     if(err) {
+//       return res.sendStatus(404);
+//     } else if(user) {
+//       req.user = user;
+//       return next();
+//     }
+//   }).catch(next);
+// });
 
-router.get('/:id', (req, res, next) => {
-  return res.json({
-    user: req.user.toJSON(),
-  });
+// router.get('/:id', (req, res, next) => {
+//   return res.json({
+//     user: req.user.toJSON(),
+//   });
+// });
+router.get('/policy', (req, res, next) => {
+ 
+  return res.render("policy.ejs");
 });
 
 
