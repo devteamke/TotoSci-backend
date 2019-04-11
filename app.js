@@ -73,4 +73,4 @@ app.use((err, req, res) => {
 
 
 
-const server = app.listen(PORT,() => console.log(`Locality is running on port :${PORT}`));
+const server = app.listen(PORT,() => console.log(`Locality is running, port :${PORT}`));
