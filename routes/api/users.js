@@ -376,6 +376,7 @@ router.post('/new_token',passport.authenticate('jwt',{session:false}),(req,res,n
 
 
 router.get('/all', (req, res, next) => {
+    return res.send('all');
   return User.find()
     .sort({ createdAt: 'descending' })
     .then((users) => res.json({ users: users.map(user=> user.toJSON()),success:true }))
