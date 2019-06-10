@@ -4,14 +4,25 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const passport = require('passport');
 const User = mongoose.model('Users');
-const driver = require('../../neo4j')
+const Student = mongoose.model('Students');
+const Middleware= require('../../Middleware/index');
+const Nodemailer =require('nodemailer');
+const xoauth2 =require('xoauth2');
+const  generator = require('generate-password');
+const Helpers= require('../../helpers/index');
+
+
+
+/**
+*Endpoint for loging in, requires checking if user is active ...*
+**/
 router.post('/login', (req, res, next) => {
   const { body } = req;
 
-  if(!body.username) {
+  if(!body.email) {
     return res.status(422).json({
       errors: {
-        username: 'is required',
+        email: 'is required',
       },
     });
   }
@@ -23,26 +34,22 @@ router.post('/login', (req, res, next) => {
       },
     });
   } 
-  let username = body.username;
+  let email = body.email;
   let password = body.password;
-    let errors ={}
-    User.findOne({username})
+    let errors ={};
+    User.findOne({email})
         .then(user => {
             if(!user) {
               
              
-                return res.status(200).json({success:false,message:'Incorrect username or password!'});
+                return res.status(200).json({success:false,message:'Incorrect email or password!'});
             }
             bcrypt.compare(password, user.password)
                     .then(isMatch => {
                         if(isMatch) {
-                            const payload = {
-                                id: user.id,
-                                username: user.username,
-                                role: user.role,
-                                email:user.email,
-                                isSetUp:user.isSetUp,
-                            }
+							if(user.status!=='active') return res.status(200).json({success:false,message:'Your account was suspended!'});
+                            const payload = parseUser(user._doc);
+							
                             jwt.sign(payload, 'secret', {
                                 expiresIn: 90000
                             }, (err, token) => {
@@ -51,7 +58,7 @@ router.post('/login', (req, res, next) => {
                                     res.json({
                                         success: true,
                                         token: `Bearer ${token}`,
-                                        user_id:user._id,
+                                      
                                         message:'You have successfully logged in'
                                     });
                                 }
@@ -66,31 +73,82 @@ router.post('/login', (req, res, next) => {
 
 
 });
-router.post('/register', (req, res, next) => {
-  const { body } = req;
-  console.log(body)
-  if(!body.username) {
-    return res.status(422).json({
-      errors: {
-        username: 'is required',
-      },
-    });
-  }
 
+/**
+*Endpoit for a user completing their profile
+**/
+router.post('/complete_profile',passport.authenticate('jwt', { session: false }), (req, res, next) => {
+	const { user } = req;
+	const { body } = req;
+
+	User.findById(user._id)
+		.then( found =>{
+			
+			found.salutation =body.salutation;
+			found.residence =body.residence;
+			found.idNumber =body.idNumber;
+			found.isSetUp=true;
+			found.phone_number.alt =body.alt_phone_number;
+			
+			if(user.role=="trainer"||'instructor'){
+				found.county =body.county;
+				found.subcounty =body.subcounty;
+			}
+			return found;
+		
+		})
+		.then(found=>{
+			return found.save();
+		})
+		.then((saved)=>{
+			       const payload = Helpers.parseUser(saved);
+							
+                            jwt.sign(payload, 'secret', {
+                                expiresIn: 90000
+                            }, (err, token) => {
+                                if(err) console.error('There is some error in token', err);
+                                else {
+                                   	res.json({success:true,messageg:'Profile Updated', user:Helpers.parseUser(saved),  token: `Bearer ${token}`, });
+                                }
+                            });
+				
+		
+		})
+		.catch(err=>console.log(err));
+		
+	
+});
+
+/**
+*Endpoint for new user *Is here for postmant usage, should be deleted before putting to production*
+**/
+
+router.post('/new', (req, res, next) => {
+  const { body } = req;
+ 
   if(!body.email) {
     return res.status(422).json({
       errors: {
         email: 'is required',
       },
     });
+  }
+ 
+  if(!body.password) {
+    return res.status(422).json({
+      errors: {
+        password: 'is required',
+      },
+    });
   } 
-  // if(!body.type) {
-  //   return res.status(422).json({
-  //     errors: {
-  //       type: 'is required',
-  //     },
-  //   });
-  // } 
+  if(!body.role) {
+    return res.status(422).json({
+      errors: {
+        role: 'is required',
+      },
+    });
+  } 
+  
  if(!body.password) {
     return res.status(422).json({
       errors: {
@@ -115,23 +173,17 @@ router.post('/register', (req, res, next) => {
   
  
     User.findOne({
-        username: body.username
+        email: body.email
     }).then(user => {
         if(user) {
             return res.status(200).json({success:false,message:'Username already exists'});
         }
         else {
-           User.findOne({
-           email: body.email
-        }).then(user => {
-            if(user) {
-            return res.status(200).json({success:false,message:'Email already exists'});
-        }
-        else {
+       
             const newUser = new User({
                 username: body.username,
                 email: body.email,
-                type: body.type,
+                role: body.role,
                 password: body.password,
                
             });
@@ -146,21 +198,9 @@ router.post('/register', (req, res, next) => {
                             newUser
                                 .save()
                                 .then(user => {
-                                    var neo_session = driver.session();
-                                     neo_session
-                                    .run(`CREATE (u:User {username:'${user.username}',_id:'${user._id}'}) RETURN u.username`)
-                                    .then((result)=> {
-                                        result.records.forEach(function(record) {
-                                            console.log(record)
-                                        });
-                                
-                                      neo_session.close();
-                                    })
-                                    .catch((error)=> {
-                                        console.log(error);
-                                    });
+                                   
                                     user = user.toObject();
-                                    delete user.password
+                                    delete user.password;
                                       const payload = {
                                         id: user._id,
                                         username: user.username,
@@ -177,7 +217,7 @@ router.post('/register', (req, res, next) => {
                                                 success: true,
                                                 token: `Bearer ${token}`,
                                                
-                                                message:'You have successfully registered to locality'
+                                                message:'User added succe'
                                             });
                                         }
                                     });
@@ -189,12 +229,57 @@ router.post('/register', (req, res, next) => {
             });
         }
         })
+		.catch((err)=>{console.log(err)})
+	;
            
-        }
-    });
+        
+    
   
 });
 
+
+/**
+*Endpoint for deleting users, should be moved to admin, and modified so that an admin cannot delete themself accidentally*
+**/
+router.post('/remove',passport.authenticate('jwt', { session: false }),(req,res)=>{
+	const { body } = req;
+	const { user } = req;
+	//console.log(user);
+	//return
+   if(user.role=='admin'){
+			User.find({email:body.email}).remove(err=>{
+               if(err){
+				   return res.status(400).json({success:false,message:err.message});
+			   }else{
+				    return res.status(200).json({success:true,message:'User Successfully removed'});
+			   }
+			});				
+	}
+	else if(user.role=='principal'){
+		
+		User.findById(body.id)
+			.then(founduser=>{
+			//console.log(founduser);
+			
+				if(founduser.role=='admin'){
+					return res.status(400).json({success:false,message:'You are unauthorized to remove the admin'});
+				}else{
+					founduser.remove(()=>{
+						return res.status(200).json({success:true,message:'User Successfully removed'});
+					});
+					
+				}
+			});
+	}else{
+		return res.status(400).json({success:false,message:'You are unauthorized to perform the action'});
+	}
+		
+});
+
+
+/**
+*Endpoint for fetching user profile, remain incase needed for future use*
+**/
 router.post('/profile', passport.authenticate('jwt', { session: false }), (req, res) => {
   
    User.findById(req.user.id)
@@ -212,6 +297,9 @@ router.post('/profile', passport.authenticate('jwt', { session: false }), (req, 
        })
 });
 
+/**
+*Endpoint for upadting user profile, *Should be modified to allow greater client side control*
+**/
 router.post('/update_profile', passport.authenticate('jwt', { session: false }), (req, res) => {
     const { body } = req;
     console.log('[data of request]', req.body)
@@ -226,103 +314,39 @@ router.post('/update_profile', passport.authenticate('jwt', { session: false }),
          res.json({success:true,message:'Query successful', user:user})
        })
        .catch((err)=>{
-         console.log(err)
-       })
-});
-router.post('/save_interests', passport.authenticate('jwt', { session: false }), (req, res) => {
-    const { body } = req;
-    const { user } = req;
-    const { items } =req.body;
-    console.log('[data of request]', req.body)
-   
-     const keys =  Object.keys(items)
-     const values = Object.values(items)
-      console.log('[keys]', Object.keys(items))
-      console.log('[values]', Object.values(items))
-     let interests =[];
-    for(let i=0;i<keys.length;i++){
-        console.log(i)
-        let toPush = {
-           interest:keys[i],
-           weight:values[i]
-         }
-       if(values[i]!==0){
-            interests.push(toPush);
-       }
-      
-    }
-    console.log('[interests]',interests)
-   
-   
-    const saveToGraph = () =>  {
-        let matchString="";
-        let createString ="";
-        let comma =',';
-        interests.map((interest, i)=>{
-            
-            if(i==interests.length-1){
-                comma=''
-            }
-            matchString+=`(i${i}:Interest {name:'${interest.interest}'})${comma}`
-            createString+=`((u)-[:LIKES {weight: ${interest.weight*2}}]->(i${i}))${comma}`;  
-            
-        })
-        console.log('[matchString]',matchString)
-        console.log('[createString]',createString)
-         var neo_session = driver.session();
-                                     neo_session
-                                    .run(`MATCH (u:User {_id: '${user._id}'}), ${matchString} CREATE ${createString} RETURN u`)
-                                    .then((result)=> {
-                                        result.records.forEach(function(record) {
-                                            console.log(record)
-                                        });
-                                
-                                      neo_session.close();
-                                    })
-                                    .catch((error)=> {
-                                        console.log(error);
-                                    }); 
-    }
-   
-   User.findOneAndUpdate({_id:req.user.id},{interests:body.interests, isSetUp:true}, {new: true})
-       .then((user)=>{
-        user = user.toObject()
-         delete user.password;
-         delete user.updatedAt;
-         delete user.__v;
-         delete user.role;
-         console.log(user)
-         saveToGraph();
-         res.json({success:true,message:'Query successful', user:user})
-               
-    
-       })
-       .catch((err)=>{
-         console.log(err)
-       })
+         console.log(err);
+       });
 });
 
+/**
+*Endpoint for a user to change their password*
+**/
 router.post('/update_password', passport.authenticate('jwt', { session: false }), (req, res) => {
     const { body } = req;
     const { user } = req;
-    console.log('[data of request]', req.body)
-  let username = user.username;
-  let password = body.password;
-    let errors ={}
-    User.findOne({username})
+    
+  let email = user.email;
+  let password = body.opass;
+	console.log(user);
+	
+    let errors ={};
+    User.findOne({email})
         .then(user => {
+
             if(!user) {
               
              
                 return res.status(200).json({success:false,message:'Failed to update password!'});
             }
+		
                 bcrypt.compare(password, user.password)
                         .then(isMatch => {
+						
                             if(isMatch) {
                                bcrypt.genSalt(10, (err, salt) => {
                                 if(err) console.error('There was an error', err);
                                 else {
-                                    bcrypt.hash(body.newPassword, salt, (err, hash) => {
+                                    bcrypt.hash(body.newpass, salt, (err, hash) => {
                                         if(err) console.error('There was an error', err);
                                         else {
                                             user.password = hash;
@@ -345,7 +369,9 @@ router.post('/update_password', passport.authenticate('jwt', { session: false })
   
  
 });
-
+/**
+*Endpoint for new auth token, may be usefull in refresh tokens, or after profile change*
+**/
 router.post('/new_token',passport.authenticate('jwt',{session:false}),(req,res,next)=>{
     const { user } = req;
     const { body } = req;
@@ -371,17 +397,145 @@ router.post('/new_token',passport.authenticate('jwt',{session:false}),(req,res,n
                                     });
                                 }
                             });
-})
+});
+
+/**
+*Endpoint for setting  reset token.*
+**/
+router.post('/resetToken', (req, res, next) => {
+  const { body } = req;
+
+  if(!body.email) {
+    return res.status(422).json({
+      errors: {
+        email: 'is required',
+      },
+    });
+  }
+	let token = generator.generate({
+					length: 12,
+					numbers: true,
+					upercase:true,
+					symbol:true
+				});
+	let expires = new Date();
+	console.log(expires.getHours());
+	expires.setHours(expires.getHours()+1);
+ 	console.log(expires.getHours());
+    User.findOneAndUpdate({email:body.email}, {reset:{token,expires:expires}})
+        .then(user => {
+					 const smtpTransport = Nodemailer.createTransport({
+                                                           host: 'smtp.gmail.com',
+                                                           port: 465,
+                                                           secure: true,
+                                                           auth: {
+                                                                 type: 'OAuth2',
+                                                                 user: 'devteamke2018@gmail.com',
+                                                             clientId: '719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com',
+														  clientSecret: 'I5wZkEJ--0dNg5slemh7R33Z',
+														  refreshToken: '1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs'
+                                                            }
+                                                });
+                                            
+                                                let mailOptions = {
+                                                    to: user.email,
+                                                    from:'devteamke2018@gmail.com',
+                                                    subject:'Password Reset',
+                                                    html:'<h4>Dear sir/madam,</h4>  Click the link below to reset your password. ' + '<p>Link:<b> https://school-system-ajske.run.goorm.io/reset/' +token+'</b> ' 																+ '<p> If you did not request a password reset ignore this email.' 
+                                                    };
+                                                    smtpTransport.sendMail(mailOptions,(err,info)=>{
+                                                        if(err){
+                                                            return res.status(400).json({success:false,message:err.message});
+                                                        }else{
+                                                           return res.json({success:true, message:'Reset link sent, check your email address, \n It expires in an hour !'});
+                                                        }
+                                                    });
+		
+			
+		})
+        .catch(err=>{
+		console.log(err);
+		});
+
+  
+
+
+});
+/**
+*Endpoint for checking if reset token is valid.*
+**/
+
+router.post('/checkingToken', (req, res, next) => {
+  const { body } = req;
+  const now = new Date();
+  User.findOne({'reset.token':body.token, 'reset.expires':{$gt:now}})
+	  .then((user)=>{
+	  	  console.log('[user from token]',user);
+	  
+		  if(user){
+				res.json({success:true, _id:user._id});
+		  }else{
+				res.json({success:false, message:'Invalid or expired reset token',});
+		  }
+	  
+	  })
+	  .catch(err=>console.log(err));
+	
+	
+	
+});
+
+/**
+*Endpoint for reseting password*
+**/
+
+router.post('/resetPassword', (req, res, next) => {
+  const { body } = req;
+	let password = body.password; 
+	 User.findOne({'reset.token':body.token })
+	  .then((user)=>{
+	  	  console.log('[user from token]',user);
+	  
+		  if(user){
+			
+			  
+			   bcrypt.genSalt(10, (err, salt) => {
+					if(err) console.error('There was an error', err);
+					else {
+						bcrypt.hash(password, salt, (err, hash) => {
+							if(err) return	res.json({success:false, message:'Failed to reset your password!'});
+							else {
+								user.password =hash;
+								user.reset ={};
+								user.save().
+									then(()=>{
+										res.json({success:true, message:'Your password reset was successful!'});
+									})
+									.catch((err)=>res.json({success:false, message:'Failed to reset your password!'}));
+							}
+						});
+					}
+				});
+			  
+			  
+			  
+		  }else{
+				res.json({success:false, message:'Invalid or expired reset token',});
+		  }
+	  
+	  })
+	  .catch(err=>console.log(err));
+});
 /*returns all users */
 
 
-router.get('/all', (req, res, next) => {
-    return res.send('all');
-  return User.find()
-    .sort({ createdAt: 'descending' })
-    .then((users) => res.json({ users: users.map(user=> user.toJSON()),success:true }))
-    .catch(next);
-});
+// router.get('/all', (req, res, next) => {
+//     return res.send('all');
+//   return User.find()
+//     .sort({ createdAt: 'descending' })
+//     .then((users) => res.json({ users: users.map(user=> user.toJSON()),success:true }))
+//     .catch(next);
+// });
 // /*Fectch a single user*/
 // router.get('/:id', (req, res, next) => {
 //   return User.find({_id:req.params.id})
@@ -406,36 +560,50 @@ router.get('/all', (req, res, next) => {
 //     user: req.user.toJSON(),
 //   });
 // });
-router.get('/policy', (req, res, next) => {
+// router.get('/policy', (req, res, next) => {
  
-  return res.render("policy.ejs");
-});
+//   return res.render("policy.ejs");
+// });
 
 
-router.patch('/:id', (req, res, next) => {
-  const { body } = req;
+// router.patch('/:id', (req, res, next) => {
+//   const { body } = req;
 
-  if(typeof body.title !== 'undefined') {
-    req.article.title = body.title;
-  }
+//   if(typeof body.title !== 'undefined') {
+//     req.article.title = body.title;
+//   }
 
-  if(typeof body.author !== 'undefined') {
-    req.article.author = body.author;
-  }
+//   if(typeof body.author !== 'undefined') {
+//     req.article.author = body.author;
+//   }
 
-  if(typeof body.body !== 'undefined') {
-    req.article.body = body.body;
-  }
+//   if(typeof body.body !== 'undefined') {
+//     req.article.body = body.body;
+//   }
 
-  return req.article.save()
-    .then(() => res.json({ article: req.article.toJSON() }))
-    .catch(next);
-});
+//   return req.article.save()
+//     .then(() => res.json({ article: req.article.toJSON() }))
+//     .catch(next);
+// });
 
-router.delete('/:id', (req, res, next) => {
-  return User.findByIdAndRemove(req.article._id)
-    .then(() => res.sendStatus(200))
-    .catch(next);
-});
-
+// router.delete('/:id', (req, res, next) => {
+//   return User.findByIdAndRemove(req.article._id)
+//     .then(() => res.sendStatus(200))
+//     .catch(next);
+// });
+const parseUser  = (user) =>{
+	
+	if(user.role=="admin"){
+		delete user.students;
+		delete user.trainers;
+		delete user.instructors;
+		delete user.courses;
+		
+		
+	}
+	delete user.password;
+	delete user.__v;
+	return user;
+	
+}
 module.exports = router;
