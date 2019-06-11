@@ -11,6 +11,8 @@ const Nodemailer =require('nodemailer');
 const Lowercase  =require('lower-case');
 const xoauth2 =require('xoauth2');
 const  generator = require('generate-password');
+
+const Helpers= require('../../helpers/index');
 //
 const ObjectId = mongoose.Types.ObjectId;
 //Add middlware isAdmin,
@@ -18,7 +20,7 @@ const ObjectId = mongoose.Types.ObjectId;
 /**
 *Endpoint for registering admins *should allow checking if email was sent*
 **/
-router.post('/register', passport.authenticate('jwt', { session: false }), Middleware.isAdmin, (req, res, next) => {
+router.post('/register', passport.authenticate('jwt', { session: false }),(req, res, next) => {
 	
 	  const { body } = req;
 	  
@@ -38,15 +40,15 @@ router.post('/register', passport.authenticate('jwt', { session: false }), Middl
 		User.findOne({
 				$or:[
 					 {email: body.email},
-					 {idNumber:body.idNumber}
+					
 					]
 		}).then(user => {
 			if(user) {
-				return res.status(200).json({success:false,message:'Email or ID Number is  already use!'});
+				return res.status(200).json({success:false,message:'Email is  already use!'});
 			}else {
 				const newUser = new User({
 						...body,
-					salutation:body.salutation.toLowerCase(),
+					
 					addedBy:req.user._id,
 						password: password});
 				
@@ -75,13 +77,13 @@ router.post('/register', passport.authenticate('jwt', { session: false }), Middl
                                                             }
                                                 });
                                             let as;
-											as= user.role.indexOf('-')>0? capitalize(user.role.split('-')[0]+' '+capitalize(user.role.split('-')[1])): capitalize(user.role);
+											as= user.role.indexOf('-')>0? Helpers.capitalize(user.role.split('-')[0]+' '+Helpers.capitalize(user.role.split('-')[1])): Helpers.capitalize(user.role);
 									
                                                 let mailOptions = {
                                                     to: user.email,
                                                     from:'devteamke2018@gmail.com',
                                                     subject:'TotoSci Academy',
-                                                    html:'<h4>Hello ' + capitalize(user.fname) + ',</h4>  You have been added to TotoSci Academy  as a ' +  
+                                                    html:'<h4>Hello ' + Helpers.capitalize(user.fname) + ',</h4>  You have been  added to TotoSci Academy  as a ' +  
 													
 												
 													
@@ -104,78 +106,21 @@ router.post('/register', passport.authenticate('jwt', { session: false }), Middl
 			});
 
 			
-		});
-
-/**
-*Endpiont for updating users profile, from account statusto info*
-**/
-router.patch('/save_profile', passport.authenticate('jwt', { session: false }), Middleware.isAdmin, (req, res, next) => {
-  const { user } = req.body;
-  let   user2 = {...user};
-
-	
-	delete user2.createdAt;
-	delete user2.createdAt;
-	delete user2._id;
-	delete user2.__v;
-	console.log('[user]',user);
-  User.findOneAndUpdate({_id:user._id},user2,{new: true, projection:{password:0, __v:0}
-											 }
-						)
-	  .then((newUser)=>{
-	  	console.log('{new}', newUser);
-	  	newUser = newUser.toObject();
-	  	res.json({success:true,user:newUser,message:'User info updated!'});
-      })
-	  .catch((err)=>console.log(err));
-
-
 });
 
-router.patch('/password', passport.authenticate('jwt', { session: false }), Middleware.isAdmin, (req, res, next) => {
-  const { body } = req;
-  const _id = body._id;
-  let password = body.password;
-	
- bcrypt.genSalt(10, (err, salt) => {
-                if(err) console.error('There was an error', err);
-                else {
-                    bcrypt.hash(password, salt, (err, hash) => {
-                        if(err) return	res.json({success:false, message:'Failed to update password!'});
-                        else {
-                      User.findOneAndUpdate({_id:_id},{password:hash},{new: true, projection:{password:0}})
-						  .then((user)=>{
-							console.log('{new}', user);
-
-							res.json({success:true, message:'User password updated!'});
-						  })
-						  .catch((err)=>res.json({success:false, message:'Failed to update password!'}));
-						}
-					});
-				}
-});
-
-
-
-
-});
 
 /**
 *Endpoint fo getting a paginated list of all users, *should only be accessible by admin and also omit the current user requesting *
 **/
-router.post('/all',  passport.authenticate('jwt', { session: false }),Middleware.isAdmin ,(req,res,next)=>{
+router.post('/all',  passport.authenticate('jwt', { session: false }),Middleware.isChief ,(req,res,next)=>{
 	const { body } = req;
 	const { user } = req;
 	let st = [
-			{ role : "admin" } ,
-			{ role : "other" } ,
-			{role:'principal'},
-			{ role : "receptionist" } ,
-			{role:'teacher'},
+			
 			{role:'parent'},
 			{role:'chief-trainer'},
 			{role:'trainer'},
-			{role:'manager'},
+			
 			{role:'instructor'},
 		]	;
 	let ft={};
@@ -242,13 +187,69 @@ router.post('/all',  passport.authenticate('jwt', { session: false }),Middleware
 		.catch((err)=>{ console.log(err)});
 });
 
-router.delete('/account',passport.authenticate('jwt', { session: false }), Middleware.isAdmin,(req, res, next) => {
-	const { body } = req;
-  return User.findByIdAndRemove(body._id)
-    .then(() => res.json({success:true,message:'Account successfully deleted!'}))
-    .catch((err) => res.json({success:false,message:err.msg}));
+
+/**
+*Endpoint for changing subordinates password
+**/
+
+router.patch('/password', passport.authenticate('jwt', { session: false }), Middleware.isChief, (req, res, next) => {
+  const { body } = req;
+  const _id = body._id;
+  let password = body.password;
+	
+ bcrypt.genSalt(10, (err, salt) => {
+                if(err) console.error('There was an error', err);
+                else {
+                    bcrypt.hash(password, salt, (err, hash) => {
+                        if(err) return	res.json({success:false, message:'Failed to update password!'});
+                        else {
+                      User.findOneAndUpdate({_id:_id},{password:hash},{new: true, projection:{password:0}})
+						  .then((user)=>{
+							console.log('{new}', user);
+
+							res.json({success:true, message:'User password updated!'});
+						  })
+						  .catch((err)=>res.json({success:false, message:'Failed to update password!'}));
+						}
+					});
+				}
 });
-const capitalize = (st) =>{
-	return st.charAt(0).toUpperCase() + st.slice(1);
-};
+
+
+
+
+});
+
+
+/**
+*Endpoint for changing subordinates profile
+
+**/
+
+
+router.patch('/save_profile', passport.authenticate('jwt', { session: false }), Middleware.isChief, (req, res, next) => {
+  const { user } = req.body;
+  let   user2 = {...user};
+
+	
+	delete user2.createdAt;
+	delete user2.createdAt;
+	delete user2._id;
+	delete user2.__v;
+	console.log('[user]',user);
+  User.findOneAndUpdate({_id:user._id},user2,{new: true, projection:{password:0, __v:0}
+											 }
+						)
+	  .then((newUser)=>{
+	  	console.log('{new}', newUser);
+	  	newUser = newUser.toObject();
+	  	res.json({success:true,user:newUser,message:'User info updated!'});
+      })
+	  .catch((err)=>console.log(err));
+
+
+});
+
+
+
 module.exports = router;

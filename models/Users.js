@@ -29,8 +29,8 @@ const UsersSchema = new Schema({
 	},
 	salutation:{
 		type:String,
-		enum:['mr','mrs','miss','dr','prof','other'],
-		default:'Other'
+		enum:['mr','mrs','miss','dr','prof','other',''],
+		default:'other'
 	},
 	 idNumber:{
 	    type:Number,	

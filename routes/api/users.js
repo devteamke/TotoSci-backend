@@ -84,7 +84,7 @@ router.post('/complete_profile',passport.authenticate('jwt', { session: false })
 	User.findById(user._id)
 		.then( found =>{
 			
-			found.salutation =body.salutation;
+			found.salutation =body.salutation?body.salutation.toLowerCase():'';
 			found.residence =body.residence;
 			found.idNumber =body.idNumber;
 			found.isSetUp=true;

@@ -22,6 +22,9 @@ Helpers.parseUser=(user)=>{
 	delete user.__v;
 	return user;
 };
+Helpers.capitalize = (st) =>{
+	return st.charAt(0).toUpperCase() + st.slice(1);
+};
 
 
 
