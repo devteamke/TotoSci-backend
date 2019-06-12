@@ -327,7 +327,7 @@ router.post(
           newCourse.save();
           return res
             .status(200)
-            .json({ success: true, message: "Course added " });
+            .json({ success: true, message: "new Course added " });
         }
       })
 
