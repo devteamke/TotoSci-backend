@@ -1,36 +1,36 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const { Schema } = mongoose;
 
-const CourseSchema = new Schema({
-    name:{
-		type:String,
-	},
-    subject:{
-		type:Array
-	},
-	fee:{
-		type:Array //of objects 
-	},
-	period:{
-		type:String
-	}
-  
-   
-   
-   
-}, { timestamps: true });
+const CourseSchema = new Schema(
+  {
+    title: {
+      type: String
+    },
+    description: {
+      type: Array
+    },
+    fee: {
+      type: Number //of objects
+    },
+    addedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "Users"
+    }
+  },
+  { timestamps: true }
+);
 
 CourseSchema.methods.toJSON = function() {
   return {
     _id: this._id,
+    title: this.title,
+    description: this.description,
+    fee: this.fee,
 
-    
     createdAt: this.createdAt,
-    updatedAt: this.updatedAt,
- 
-    
+    updatedAt: this.updatedAt
   };
 };
 
-mongoose.model('Course', CoursesSchema);
+mongoose.model("Course", CourseSchema);
