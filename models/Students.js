@@ -1,45 +1,50 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
+const mongoosePaginate = require("mongoose-aggregate-paginate-v2");
 
 const { Schema } = mongoose;
 
-const StudentsSchema = new Schema({
- 
-    fname:{
-        type:String   
+const StudentsSchema = new Schema(
+  {
+    fname: {
+      type: String
     },
-    lname:{
-        type:String   
+    lname: {
+      type: String
     },
-   
-	parent:{
-		 type: Schema.Types.ObjectId, 
-		 ref: 'Users' 
-	},
-  
-    status:{type:String,
-        enum:['active','suspended','expelled'],
-        default:'active',
-       required: true 
+    school: { type: Schema.Types.ObjectId, ref: "Schools" },
+    parent: {
+      type: Schema.Types.ObjectId,
+      ref: "Users"
     },
-   
-   
-}, { timestamps: true });
+    isSponsored: Boolean,
+    status: {
+      type: String,
+      enum: ["active", "suspended", "expelled"],
+      default: "active",
+      required: true
+    },
+    addedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "Users"
+    }
+  },
+  { timestamps: true }
+);
 
 StudentsSchema.methods.toJSON = function() {
   return {
     _id: this._id,
-    fname:this.fname,
-    lname:this.lname,
-   
-    status:this.status,
+    fname: this.fname,
+    lname: this.lname,
 
-   parent:this.parent,
-    
+    status: this.status,
+    isSponsored: this.isSponsored,
+    parent: this.parent,
+
     createdAt: this.createdAt,
-    updatedAt: this.updatedAt,
- 
-    
+    updatedAt: this.updatedAt
   };
 };
 
-mongoose.model('Students', StudentsSchema);
+StudentsSchema.plugin(mongoosePaginate);
+mongoose.model("Students", StudentsSchema);

@@ -49,6 +49,8 @@ require("./models/Users");
 require("./models/Students");
 require("./models/Courses");
 require("./models/Parents");
+require("./models/Schools");
+
 require("./passport")(passport);
 // Add routes
 app.use(require("./routes"));

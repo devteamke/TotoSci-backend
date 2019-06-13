@@ -3,16 +3,16 @@ const mongoosePaginate = require("mongoose-aggregate-paginate-v2");
 
 const { Schema } = mongoose;
 
-const CoursesSchema = new Schema(
+const SchoolsSchema = new Schema(
   {
     name: {
       type: String
     },
-    description: {
+    county: {
       type: String
     },
-    charge: {
-      type: Number //of objects
+    sub_county: {
+      type: String
     },
     addedBy: {
       type: Schema.Types.ObjectId,
@@ -22,16 +22,19 @@ const CoursesSchema = new Schema(
   { timestamps: true }
 );
 
-CoursesSchema.methods.toJSON = function() {
+SchoolsSchema.methods.toJSON = function() {
   return {
     _id: this._id,
     name: this.name,
-    description: this.description,
-    fee: this.fee,
-
+    county: this.county,
+    sub_county: this.sub_county,
+    addedBy: this.addedBy,
+    
+    
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
   };
 };
-CoursesSchema.plugin(mongoosePaginate);
-mongoose.model("Courses", CoursesSchema);
+
+SchoolsSchema.plugin(mongoosePaginate);
+mongoose.model("Schools", SchoolsSchema);

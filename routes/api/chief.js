@@ -5,15 +5,16 @@ const jwt = require("jsonwebtoken");
 const passport = require("passport");
 const User = mongoose.model("Users");
 const Student = mongoose.model("Students");
-const Course = mongoose.model("Course");
+const Course = mongoose.model("Courses");
 const Parent = mongoose.model("Parents");
+const School = mongoose.model("Schools");
 const Middleware = require("../../Middleware/index");
 const Validator = require("validator");
 const Nodemailer = require("nodemailer");
 const Lowercase = require("lower-case");
 const xoauth2 = require("xoauth2");
 const generator = require("generate-password");
-
+const assert = require("assert");
 const Helpers = require("../../helpers/index");
 //
 const ObjectId = mongoose.Types.ObjectId;
@@ -139,7 +140,8 @@ router.post(
     let student = {
       fname: body.studentFname,
       lname: body.studentLname,
-      school: body.school
+      school: body.school,
+      isSponsored: body.isSponsored
     };
 
     let parent = {
@@ -160,11 +162,33 @@ router.post(
       symbol: true
     });
     let sendpasssword = password;
+    let session = null;
+
+    let collections = mongoose.connections[0].collections;
+    let names = [];
+
+    Object.keys(collections).forEach(function(k) {
+      names.push(k);
+    });
+
+    if (!names.includes("parents")) {
+      Parent.createCollection();
+    }
+    Student.createCollection();
+    if (!names.includes("students")) {
+    }
 
     Promise.resolve()
+      .then(() => User.startSession())
+      .then(_session => {
+        session = _session;
+        session.startTransaction();
+      })
       .then(() => {
-        if (body.existingParent) {
-          return User.findById(body.existingParent);
+        if (body.isSponsored) {
+          return;
+        } else if (body.existingParent) {
+          return User.findById(body.existingParent).session(session);
         } else {
           //Create parent
           return User.findOne({
@@ -175,22 +199,26 @@ router.post(
               if (user) {
                 throw new Error("email in use");
               } else {
-                let newUser = new User({
-                  ...parent,
-
-                  addedBy: req.user._id,
-                  password: password
-                });
+                let password = sendpasssword;
 
                 return bcrypt.genSalt(10).then(salt => {
-                  return { salt, newUser };
+                  return { salt, password };
                 });
               }
             })
             .then(obj => {
-              return bcrypt.hash(obj.newUser.password, obj.salt).then(hash => {
-                obj.newUser.password = hash;
-                return obj.newUser.save().then(saved => {
+              return bcrypt.hash(obj.password, obj.salt).then(hash => {
+                return User.create(
+                  [
+                    {
+                      ...parent,
+
+                      addedBy: req.user._id,
+                      password: hash
+                    }
+                  ],
+                  { session: session }
+                ).then(saved => {
                   return saved;
                 });
               });
@@ -201,36 +229,78 @@ router.post(
       .then(user => {
         //Create new student
         console.log("createdParent", user);
-        const newStudent = new Student({
-          ...student,
-          parent: user._id || user
-        });
 
-        return newStudent.save();
+        return Student.create(
+          [
+            {
+              ...student,
+              parent: user ? user._id : null,
+              addedBy: req.user._id
+            }
+          ],
+          { session: session }
+        ).then(student => {
+          return { student: student, parent: user };
+        });
       })
-      .then(student => {
+      .then(obj => {
         //add Student_id to parent
-        console.log("created student", student);
-        return User.findById(student.parent).then(parent => {
-          parent.students.push(student._id);
+        if (body.isSponsored) {
+          return { student: obj.student };
+        }
+        //get parent session
 
-          return parent.save().then(parent => {
-            return { parent, student };
-          });
-        });
+        //get student session
+
+        console.log("[createdStudent ID ]", obj.student);
+        console.log("[created###Parent]", obj.parent);
+        if (typeof obj.parent == "array") {
+          obj.parent[0].students.push(obj.student[0]._id);
+
+          return obj.parent[0]
+            .save()
+
+            .then(parent => {
+              return { parent, student };
+            });
+        } else {
+          obj.parent.students.push(obj.student[0]._id);
+
+          return obj.parent
+            .save()
+
+            .then(parent => {
+              return { parent, student };
+            });
+        }
       })
       .then(obj => {
         //create parent account
-        let parentAcc = new Parent({
-          pId: obj.parent._id
+        console.log("[created student]", obj.student);
+        if (body.isSponsored || body.existingParent) {
+          return { student: obj.student };
+        }
+        return Parent.create(
+          [
+            {
+              pId: obj.parent._id
+            }
+          ],
+          { session: session }
+        ).then(() => {
+          return {
+            parent: obj.parent,
+            student: obj.student /* parent account*/
+          };
         });
-        parentAcc.save();
         // console.log("ParrentAcc", parentAcc);
         // console.log(obj);
-        return { parent: obj.parent, student: obj.student /* parent account*/ };
       })
       .then(obj => {
         // Create student fee
+        if (obj.student.isSponsored) {
+          return { student: obj.student };
+        }
         return {
           parent: obj.parent,
           student: obj.student /* student account*/
@@ -238,6 +308,14 @@ router.post(
       })
       .then(obj => {
         //send email
+        if (body.isSponsored || body.existingParent) {
+          session.commitTransaction();
+          return res.status(200).json({
+            success: true,
+            message: "Registration of new student was successful"
+          });
+        }
+
         const user = obj.parent;
         const smtpTransport = Nodemailer.createTransport({
           host: "smtp.gmail.com",
@@ -284,15 +362,17 @@ router.post(
               .status(400)
               .json({ success: false, message: err.message });
           } else {
+            session.commitTransaction();
             return res.status(200).json({
               success: true,
-              message:
-                "Registration successful.An email has been sent to the new user for login details!"
+              message: "Registration of new student was successful"
             });
           }
         });
       })
       .catch(err => {
+        session.abortTransaction();
+        console.log(err);
         console.log(err.message);
         if (err.message == "email in use") {
           return res
@@ -303,7 +383,7 @@ router.post(
   }
 );
 /**
- *Endpoint for fetching parents *
+ *Endpoint for fetching adding new course *
  **/
 router.post(
   "/new_course",
@@ -312,8 +392,9 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
+    console.log(body);
 
-    Course.findOne({ title: body.title })
+    Course.findOne({ name: { $regex: body.name, $options: "i" } })
       .then(foundcourse => {
         if (foundcourse) {
           return res
@@ -327,7 +408,7 @@ router.post(
           newCourse.save();
           return res
             .status(200)
-            .json({ success: true, message: "new Course added " });
+            .json({ success: true, message: "New Course added successfully " });
         }
       })
 
@@ -337,7 +418,100 @@ router.post(
       });
   }
 );
+/**
+ *Endpoint for adding new school
+ **/
 
+router.post(
+  "/new_school",
+  passport.authenticate("jwt", { session: false }),
+
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+    body.name = Helpers.kebab(body.name);
+
+    School.findOne({ name: { $regex: body.name, $options: "i" } })
+      .then(foundschool => {
+        if (foundschool) {
+          return res
+            .status(403)
+            .json({ success: false, message: "School already exists" });
+        } else {
+          let newSchool = new School({
+            ...body,
+            addedBy: user._id
+          });
+          newSchool.save();
+          return res
+            .status(200)
+            .json({ success: true, message: "New school added successfully " });
+        }
+      })
+
+      .catch(err => {
+        console.log(err);
+        return res.status(400).json({ success: false, message: err.message });
+      });
+  }
+);
+/**
+Endpoint for fetcging courses **/
+
+router.post(
+  "/all_courses",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+    let st = [{ role: "parent" }];
+    let ft = {};
+    console.log(body, user);
+
+    if (body.query) {
+      ft = {
+        $or: [
+          { name: { $regex: body.query, $options: "i" } },
+          { description: { $regex: body.query, $options: "i" } },
+
+          { charge: { $regex: body.query, $options: "i" } }
+        ]
+      };
+    }
+
+    // 	console.log('[filter]', ft);
+    // console.log('[type]', st);
+    let aggregate = Course.aggregate()
+      .match(ft)
+      .lookup({
+        from: "users",
+        let: { userId: "$addedBy" },
+        pipeline: [
+          { $addFields: { userId: { $toObjectId: "$userId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+          { $project: { fname: 1, lname: 1 } }
+        ],
+
+        as: "addedBy"
+      });
+
+    Course.aggregatePaginate(aggregate, {
+      page: body.page,
+      limit: body.limit
+    })
+      .then(result => {
+        console.log("[results]", result);
+        res.status(200).json({ success: true, result: result });
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  }
+);
+/**
+ *Endpoint for fetching parents *
+ **/
 router.post(
   "/search_parent",
   passport.authenticate("jwt", { session: false }),
@@ -384,78 +558,11 @@ router.post(
     const { body } = req;
     const { user } = req;
     let st = [
-      { role: "parent" },
       { role: "chief-trainer" },
       { role: "trainer" },
 
       { role: "instructor" }
     ];
-    let ft = {};
-
-    if (body.query) {
-      ft = {
-        $or: [
-          { email: { $regex: body.query, $options: "i" } },
-          { fname: { $regex: body.query, $options: "i" } },
-          { role: { $regex: body.query, $options: "i" } },
-          { status: { $regex: body.query, $options: "i" } },
-          { oname: { $regex: body.query, $options: "i" } }
-        ]
-      };
-    }
-
-    // 	console.log('[filter]', ft);
-    // console.log('[type]', st);
-    let aggregate = User.aggregate()
-      .match({
-        $and: [
-          { $or: st },
-          ft,
-          {
-            _id: { $ne: user._id }
-          }
-        ]
-      })
-      .lookup({
-        from: "users",
-        let: { userId: "$addedBy" },
-        pipeline: [
-          { $addFields: { userId: { $toObjectId: "$userId" } } },
-          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
-          { $project: { fname: 1, lname: 1 } }
-        ],
-
-        as: "addedBy"
-      })
-      .project({
-        password: 0,
-        isSetUp: 0
-      });
-
-    User.aggregatePaginate(aggregate, {
-      page: body.page,
-      limit: body.limit
-    })
-      .then(result => {
-        console.log("[results]", result);
-        res.status(200).json({ success: true, result: result });
-      })
-      .catch(err => {
-        console.log(err);
-      });
-  }
-);
-/**
- *Endpoint for getting a paginated list of all parents
- **/
-router.post(
-  "/all_students",
-  passport.authenticate("jwt", { session: false }),
-  Middleware.isChief,
-  (req, res, next) => {
-    const { body } = req;
-    const { user } = req;
-    let st = [{ role: "parent" }];
     let ft = {};
 
     if (body.query) {
@@ -503,6 +610,87 @@ router.post(
       limit: body.limit
     })
       .then(result => {
+        // console.log("[results]", result);
+        res.status(200).json({ success: true, result: result });
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  }
+);
+/**
+ *Endpoint for getting a paginated list of all students
+ **/
+router.post(
+  "/all_students",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+    let st = [{ role: "parent" }];
+    let ft = {};
+
+    if (body.query) {
+      ft = {
+        $or: [
+          { email: { $regex: body.query, $options: "i" } },
+          { fname: { $regex: body.query, $options: "i" } },
+
+          { lname: { $regex: body.query, $options: "i" } }
+        ]
+      };
+    }
+
+    // 	console.log('[filter]', ft);
+    // console.log('[type]', st);
+    let aggregate = Student.aggregate()
+      .match({
+        _id: { $ne: user._id }
+      })
+      .lookup({
+        from: "users",
+        let: { userId: "$addedBy" },
+        pipeline: [
+          { $addFields: { userId: { $toObjectId: "$userId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+          { $project: { fname: 1, lname: 1 } }
+        ],
+
+        as: "addedBy"
+      })
+      .project({
+        password: 0,
+        isSetUp: 0
+      })
+      .lookup({
+        from: "users",
+        let: { pId: "$parent" },
+        pipeline: [
+          { $addFields: { pId: { $toObjectId: "$pId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$pId"] } } },
+          { $project: { fname: 1, lname: 1 } }
+        ],
+
+        as: "parent"
+      })
+      .lookup({
+        from: "schools",
+        let: { SchoolId: "$school" },
+        pipeline: [
+          { $addFields: { SchoolId: { $toObjectId: "$SchoolId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$SchoolId"] } } },
+          { $project: { name: 1, county: 1, sub_county: 1 } }
+        ],
+
+        as: "school"
+      });
+
+    Student.aggregatePaginate(aggregate, {
+      page: body.page,
+      limit: body.limit
+    })
+      .then(result => {
         console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
       })
@@ -512,6 +700,154 @@ router.post(
   }
 );
 
+/**
+ *Endpoint for getting a paginated list of all schools
+ **/
+router.post(
+  "/all_schools",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    let ft = {};
+
+    if (body.query) {
+      ft = {
+        $or: [
+          { name: { $regex: body.query, $options: "i" } },
+          { county: { $regex: body.query, $options: "i" } },
+
+          { sub_county: { $regex: body.query, $options: "i" } }
+        ]
+      };
+    }
+
+    // 	console.log('[filter]', ft);
+    // console.log('[type]', st);
+    let aggregate = School.aggregate()
+
+      .lookup({
+        from: "users",
+        let: { userId: "$addedBy" },
+        pipeline: [
+          { $addFields: { userId: { $toObjectId: "$userId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+          { $project: { fname: 1, lname: 1 } }
+        ],
+
+        as: "addedBy"
+      })
+      .project({
+        password: 0,
+        isSetUp: 0
+      });
+
+    School.aggregatePaginate(aggregate, {
+      page: body.page,
+      limit: body.limit
+    })
+      .then(result => {
+        console.log("[results]", result);
+        res.status(200).json({ success: true, result: result });
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  }
+);
+/**
+ *Endpoint for fetching schools for forms s
+ **/
+router.post(
+  "/fetch_schools",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+    School.find()
+      .then(schools => {
+        console.log("found schools", schools);
+        res.json({ success: true, schools: schools });
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  }
+);
+
+/**
+*Endpoint for changing students profile
+
+**/
+router.patch(
+  "/student_save_info",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { student } = req.body;
+    let student2 = { ...student };
+
+    delete student2.parent;
+    delete student2.addedBy;
+    delete student2.createdAt;
+    delete student2.updatedAt;
+    delete student2._id;
+    delete student2.__v;
+    // console.log("[student]", student2);
+    Student.findOneAndUpdate({ _id: student._id }, student2, {
+      new: true,
+      projection: { password: 0, __v: 0 }
+    })
+      .then(updatedStudent => {
+        // console.log("{new}", updatedStudent);
+        updatedStudent = updatedStudent.toObject();
+        res.json({
+          success: true,
+          student: updatedStudent,
+          message: "User info updated!"
+        });
+      })
+      .catch(err => console.log(err));
+  }
+);
+
+/**
+ *Endpoint for changing Course details
+ **/
+
+router.patch(
+  "/update_course",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    let course = {
+      name: body.name,
+      charge: body.charge,
+      description: body.description
+    };
+    console.log(body);
+
+    Course.findOneAndUpdate({ _id: body._id }, course, {
+      new: true
+    })
+      .then(newCourse => {
+        console.log("New Course", newCourse);
+        newCourse = newCourse.toObject();
+        res.json({
+          success: true,
+          course: newCourse,
+          message: "Course details updated!"
+        });
+      })
+      .catch(err => console.log(err));
+  }
+);
 /**
  *Endpoint for changing subordinates password
  **/
