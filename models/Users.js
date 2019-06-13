@@ -86,7 +86,7 @@ const UsersSchema = new Schema(
     county: {
       type: String
     },
-    subcounty: {
+    sub_county: {
       type: String
     },
 
@@ -111,7 +111,8 @@ const UsersSchema = new Schema(
     ],
 
     school: {
-      type: String //required for trainer and instructor
+      type: Schema.ObjectId,
+      ref: "SchoolsSchema" //required for trainer and instructor
     },
 
     students: [

@@ -26,12 +26,17 @@ router.post(
   "/register",
   passport.authenticate("jwt", { session: false }),
   Middleware.isChief,
-  (req, res, next) => {
+  async (req, res, next) => {
     const { body } = req;
 
     console.log(body);
     //const p=Lowercase(...body);
-
+    if (body.role == "trainer") {
+      let school = await School.findById(body.school);
+      body.county = school.county;
+      body.sub_county = school.sub_county;
+      console.log("[trainer body]", body);
+    }
     let password = generator.generate({
       length: 8,
       numbers: true,
@@ -133,7 +138,7 @@ router.post(
 router.post(
   "/new_student",
   passport.authenticate("jwt", { session: false }),
-  (req, res, next) => {
+  async (req, res, next) => {
     const { body } = req;
     console.log("[new_student ]", body);
 
@@ -174,7 +179,8 @@ router.post(
     if (!names.includes("parents")) {
       Parent.createCollection();
     }
-    Student.createCollection();
+    await Student.createCollection();
+
     if (!names.includes("students")) {
     }
 
@@ -628,7 +634,7 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
-    let st = [{ role: "parent" }];
+
     let ft = {};
 
     if (body.query) {
@@ -676,10 +682,10 @@ router.post(
       })
       .lookup({
         from: "schools",
-        let: { SchoolId: "$school" },
+        let: { schoolId: "$school" },
         pipeline: [
-          { $addFields: { SchoolId: { $toObjectId: "$SchoolId" } } },
-          { $match: { $expr: { $eq: ["$_id", "$$SchoolId"] } } },
+          { $addFields: { schoolId: { $toObjectId: "$schoolId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$schoolId"] } } },
           { $project: { name: 1, county: 1, sub_county: 1 } }
         ],
 
@@ -777,7 +783,41 @@ router.post(
       });
   }
 );
+/**
+*Endpoint for changing School details
 
+**/
+
+router.patch(
+  "/update_school",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    let school = {
+      name: body.name,
+      county: body.county,
+      sub_county: body.sub_county
+    };
+    console.log(body);
+
+    School.findOneAndUpdate({ _id: body._id }, school, {
+      new: true
+    })
+      .then(newSchool => {
+        console.log("New School", newSchool);
+        newSchool = newSchool.toObject();
+        res.json({
+          success: true,
+          school: newSchool,
+          message: "School details updated!"
+        });
+      })
+      .catch(err => console.log(err));
+  }
+);
 /**
 *Endpoint for changing students profile
 
@@ -802,12 +842,23 @@ router.patch(
       projection: { password: 0, __v: 0 }
     })
       .then(updatedStudent => {
-        // console.log("{new}", updatedStudent);
-        updatedStudent = updatedStudent.toObject();
+        return School.findById(updatedStudent.school).then(school => {
+          console.log("found school", school);
+          let arr = [];
+          arr[0] = school._doc;
+          updatedStudent.toObject();
+          updatedStudent = { ...updatedStudent._doc, school: arr };
+          return updatedStudent;
+        });
+      })
+
+      .then(updatedStudent => {
+        console.log("{new}", updatedStudent);
+
         res.json({
           success: true,
           student: updatedStudent,
-          message: "User info updated!"
+          message: "Student info updated!"
         });
       })
       .catch(err => console.log(err));

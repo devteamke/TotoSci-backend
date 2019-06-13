@@ -40,6 +40,7 @@ StudentsSchema.methods.toJSON = function() {
     status: this.status,
     isSponsored: this.isSponsored,
     parent: this.parent,
+    school: this.school,
 
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
