@@ -11,7 +11,7 @@ const Nodemailer = require("nodemailer");
 const Lowercase = require("lower-case");
 const xoauth2 = require("xoauth2");
 const generator = require("generate-password");
-
+const assert = require("assert");
 const Helpers = require("../../helpers/index");
 //
 const ObjectId = mongoose.Types.ObjectId;
@@ -25,7 +25,7 @@ router.post(
   passport.authenticate("jwt", { session: false }),
   Middleware.isTrainer,
   (req, res, next) => {
-    const { body } = req;
+    let { body } = req;
 
     console.log(body);
     //const p=Lowercase(...body);
@@ -38,96 +38,143 @@ router.post(
     });
     let sendpasssword = password;
 
-    User.findOne({
-      $or: [{ email: body.email }]
-    }).then(user => {
-      if (user) {
-        return res
-          .status(200)
-          .json({ success: false, message: "Email is  already use!" });
-      } else {
-        const newUser = new User({
-          ...body,
+    if (body.role == "instructor") {
+      console.log("adding instructor");
 
-          addedBy: req.user._id,
-          password: password
-        });
+      body = {
+        ...body,
+        trainerId: req.user._id,
+        county: req.user.county,
+        sub_county: req.user.sub_county,
+        school: req.user.school
+      };
+    }
+    console.log("[instructor body]", body);
 
-        bcrypt.genSalt(10, (err, salt) => {
-          if (err) console.error("There was an error", err);
-          else {
-            bcrypt.hash(newUser.password, salt, (err, hash) => {
-              if (err) console.error("There was an error", err);
-              else {
-                newUser.password = hash;
-                newUser.save().then(user => {
-                  const smtpTransport = Nodemailer.createTransport({
-                    host: "smtp.gmail.com",
-                    port: 465,
-                    secure: true,
-                    auth: {
-                      type: "OAuth2",
-                      user: "devteamke2018@gmail.com",
-                      clientId:
-                        "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
-                      clientSecret: "I5wZkEJ--0dNg5slemh7R33Z",
-                      refreshToken:
-                        "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
-                    }
-                  });
-                  let as;
-                  as =
-                    user.role.indexOf("-") > 0
-                      ? Helpers.capitalize(
-                          user.role.split("-")[0] +
-                            " " +
-                            Helpers.capitalize(user.role.split("-")[1])
-                        )
-                      : Helpers.capitalize(user.role);
+    let session = null;
 
-                  let mailOptions = {
-                    to: user.email,
-                    from: "devteamke2018@gmail.com",
-                    subject: "TotoSci Academy",
-                    html:
-                      "<h4>Hello " +
-                      Helpers.capitalize(user.fname) +
-                      ",</h4>  You have been  added to TotoSci Academy  as a " +
-                      as +
-                      "<p>Login with the following details: " +
-                      "<p><b>Email</b>: " +
-                      user.email +
-                      "</p><p> <b>Password</b>: " +
-                      sendpasssword +
-                      "</p>"
-                  };
-                  smtpTransport.sendMail(mailOptions, (err, info) => {
-                    if (err) {
-                      return res
-                        .status(400)
-                        .json({ success: false, message: err.message });
-                    } else {
-                      return res
-                        .status(200)
-                        .json({
-                          success: true,
-                          message:
-                            "Registration successful.An email has been sent to the new user for login details!"
-                        });
-                    }
-                  });
-                });
-              }
+    Promise.resolve()
+      .then(() => User.startSession())
+      .then(_session => {
+        session = _session;
+        session.startTransaction();
+      })
+      .then(() => {
+        //Create instructor
+        return User.findOne({
+          email: body.email
+        })
+
+          .then(user => {
+            if (user) {
+              throw new Error("Email is already in use");
+            } else {
+              let password = sendpasssword;
+
+              return bcrypt.genSalt(10).then(salt => {
+                return { salt, password };
+              });
+            }
+          })
+          .then(obj => {
+            return bcrypt.hash(obj.password, obj.salt).then(hash => {
+              return User.create(
+                [
+                  {
+                    ...body,
+
+                    addedBy: req.user._id,
+                    password: hash
+                  }
+                ],
+                { session: session }
+              ).then(saved => {
+                return saved;
+              });
             });
+          });
+      })
+      .then(async instructor => {
+        //Add instructor id to created trainer
+        console.log("created instructor", instructor);
+        return User.findOne({ _id: req.user._id })
+          .session(session)
+          .then(trainer => {
+            trainer.instructors.push(instructor[0]._id);
+            return trainer.save().then(() => {
+              return { trainer: trainer, instructor };
+            });
+          });
+      })
+      .then(obj => {
+        console.log("object", obj);
+        const user = obj.instructor[0];
+        const smtpTransport = Nodemailer.createTransport({
+          host: "smtp.gmail.com",
+          port: 465,
+          secure: true,
+          auth: {
+            type: "OAuth2",
+            user: "devteamke2018@gmail.com",
+            clientId:
+              "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
+            clientSecret: "I5wZkEJ--0dNg5slemh7R33Z",
+            refreshToken: "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
           }
         });
-      }
-    });
+        let as;
+        as =
+          user.role.indexOf("-") > 0
+            ? Helpers.capitalize(
+                user.role.split("-")[0] +
+                  " " +
+                  Helpers.capitalize(user.role.split("-")[1])
+              )
+            : Helpers.capitalize(user.role);
+
+        let mailOptions = {
+          to: user.email,
+          from: "devteamke2018@gmail.com",
+          subject: "TotoSci Academy",
+          html:
+            "<h4>Hello " +
+            Helpers.capitalize(user.fname) +
+            ",</h4>  You have been  added to TotoSci Academy  as a " +
+            as +
+            "<p>Login with the following details: " +
+            "<p><b>Email</b>: " +
+            user.email +
+            "</p><p> <b>Password</b>: " +
+            sendpasssword +
+            "</p>"
+        };
+        smtpTransport.sendMail(mailOptions, (err, info) => {
+          if (err) {
+            throw new Error("An error ocurred");
+          } else {
+            return;
+          }
+        });
+        return;
+      })
+      .then(() => {
+        session.commitTransaction();
+        return res.json({
+          success: true,
+          message:
+            "Registration of new instructor was successful. Login details have been sent to their email address"
+        });
+      })
+      .catch(err => {
+        session.abortTransaction();
+        console.log(err);
+        return res.status(200).json({ success: false, message: err.message });
+      });
   }
 );
 
 /**
- *Endpoint fo getting a paginated list of all users, *should only be accessible by admin and also omit the current user requesting *
+ *Endpoint fo getting a paginated list of all instructors
  **/
 router.post(
   "/all",
@@ -136,7 +183,7 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
-    let st = [{ role: "parent" }, { role: "trainer" }, { role: "instructor" }];
+    let st = [{ role: "instructor" }];
     let ft = {};
 
     if (body.query) {
@@ -144,9 +191,9 @@ router.post(
         $or: [
           { email: { $regex: body.query, $options: "i" } },
           { fname: { $regex: body.query, $options: "i" } },
-          { role: { $regex: body.query, $options: "i" } },
+
           { status: { $regex: body.query, $options: "i" } },
-          { oname: { $regex: body.query, $options: "i" } }
+          { lname: { $regex: body.query, $options: "i" } }
         ]
       };
     }
@@ -173,6 +220,17 @@ router.post(
         ],
 
         as: "addedBy"
+      })
+      .lookup({
+        from: "schools",
+        let: { schoolId: "$school" },
+        pipeline: [
+          { $addFields: { schoolId: { $toObjectId: "$schoolId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$schoolId"] } } },
+          { $project: { name: 1, county: 1, sub_county: 1 } }
+        ],
+
+        as: "school"
       })
       .project({
         password: 0,
@@ -361,13 +419,11 @@ router.post(
                         .status(400)
                         .json({ success: false, message: err.message });
                     } else {
-                      return res
-                        .status(200)
-                        .json({
-                          success: true,
-                          message:
-                            "Registration successful.An email has been sent to the new user for login details!"
-                        });
+                      return res.status(200).json({
+                        success: true,
+                        message:
+                          "Registration successful.An email has been sent to the new user for login details!"
+                      });
                     }
                   });
                 });

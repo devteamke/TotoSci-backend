@@ -104,9 +104,11 @@ const UsersSchema = new Schema(
         ref: "UsersSchema" //required for trainers
       }
     ],
+   
     courses: [
       {
-        type: String
+        type: Schema.ObjectId,
+        ref: "CoursesSchema" //required for trainers
       }
     ],
 
@@ -121,6 +123,13 @@ const UsersSchema = new Schema(
         ref: "StudentsSchema" //Required for parent and instructor
       }
     ],
+    
+    trainerId: 
+    {
+        type: Schema.ObjectId,
+        ref: "UsersSchema" //required for instructor
+      }
+    ,
     residence: {
       type: String //required for parent
     }
@@ -138,6 +147,15 @@ UsersSchema.methods.toJSON = function() {
     role: this.role,
     status: this.status,
     password: this.password,
+    trainers: this.trainers,
+    instructors: this.instructors,
+    courses: this.courses,
+    school: this.school,
+    students: this.students,
+    residence: this.residence,
+    county: this.county,
+    sub_county: this.sub_county,
+    trainerId:this.trainerId,
 
     reset: this.reset,
     interests: this.interests,

@@ -1,533 +1,583 @@
-const mongoose = require('mongoose');
-const router = require('express').Router();
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const passport = require('passport');
-const User = mongoose.model('Users');
-const Student = mongoose.model('Students');
-const Middleware= require('../../Middleware/index');
-const Nodemailer =require('nodemailer');
-const xoauth2 =require('xoauth2');
-const  generator = require('generate-password');
-const Helpers= require('../../helpers/index');
-
-
+const mongoose = require("mongoose");
+const router = require("express").Router();
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const passport = require("passport");
+const User = mongoose.model("Users");
+const Student = mongoose.model("Students");
+const Middleware = require("../../Middleware/index");
+const Nodemailer = require("nodemailer");
+const xoauth2 = require("xoauth2");
+const generator = require("generate-password");
+const Helpers = require("../../helpers/index");
 
 /**
-*Endpoint for loging in, requires checking if user is active ...*
-**/
-router.post('/login', (req, res, next) => {
+ *Endpoint for loging in, requires checking if user is active ...*
+ **/
+router.post("/login", (req, res, next) => {
   const { body } = req;
 
-  if(!body.email) {
+  if (!body.email) {
     return res.status(422).json({
       errors: {
-        email: 'is required',
-      },
+        email: "is required"
+      }
     });
   }
 
-  if(!body.password) {
+  if (!body.password) {
     return res.status(422).json({
       errors: {
-        password: 'is required',
-      },
+        password: "is required"
+      }
     });
-  } 
+  }
   let email = body.email;
   let password = body.password;
-    let errors ={};
-    User.findOne({email})
-        .then(user => {
-            if(!user) {
-              
-             
-                return res.status(200).json({success:false,message:'Incorrect email or password!'});
+  let errors = {};
+  User.findOne({ email }).then(user => {
+    if (!user) {
+      return res
+        .status(200)
+        .json({ success: false, message: "Incorrect email or password!" });
+    }
+    bcrypt.compare(password, user.password).then(isMatch => {
+      if (isMatch) {
+        if (user.status !== "active")
+          return res
+            .status(200)
+            .json({ success: false, message: "Your account was suspended!" });
+        const payload = parseUser(user._doc);
+
+        jwt.sign(
+          payload,
+          "secret",
+          {
+            expiresIn: 90000
+          },
+          (err, token) => {
+            if (err) console.error("There is some error in token", err);
+            else {
+              res.json({
+                success: true,
+                token: `Bearer ${token}`,
+
+                message: "You have successfully logged in"
+              });
             }
-            bcrypt.compare(password, user.password)
-                    .then(isMatch => {
-                        if(isMatch) {
-							if(user.status!=='active') return res.status(200).json({success:false,message:'Your account was suspended!'});
-                            const payload = parseUser(user._doc);
-							
-                            jwt.sign(payload, 'secret', {
-                                expiresIn: 90000
-                            }, (err, token) => {
-                                if(err) console.error('There is some error in token', err);
-                                else {
-                                    res.json({
-                                        success: true,
-                                        token: `Bearer ${token}`,
-                                      
-                                        message:'You have successfully logged in'
-                                    });
-                                }
-                            });
-                        }
-                        else {
-                             return res.status(200).json({success:false,message:'Incorrect username or password!'});
-                        }
-                    });
-        });
-  
-
-
+          }
+        );
+      } else {
+        return res
+          .status(200)
+          .json({ success: false, message: "Incorrect username or password!" });
+      }
+    });
+  });
 });
 
 /**
-*Endpoit for a user completing their profile
-**/
-router.post('/complete_profile',passport.authenticate('jwt', { session: false }), (req, res, next) => {
-	const { user } = req;
-	const { body } = req;
+ *Endpoit for a user completing their profile
+ **/
+router.post(
+  "/complete_profile",
+  passport.authenticate("jwt", { session: false }),
+  (req, res, next) => {
+    const { user } = req;
+    const { body } = req;
 
-	User.findById(user._id)
-		.then( found =>{
-			
-			found.salutation =body.salutation?body.salutation.toLowerCase():'';
-			found.residence =body.residence;
-			found.idNumber =body.idNumber;
-			found.isSetUp=true;
-			found.phone_number.alt =body.alt_phone_number;
-			
-			if(user.role=="trainer"||'instructor'){
-				found.county =body.county;
-				found.subcounty =body.subcounty;
-			}
-			return found;
-		
-		})
-		.then(found=>{
-			return found.save();
-		})
-		.then((saved)=>{
-			       const payload = Helpers.parseUser(saved);
-							
-                            jwt.sign(payload, 'secret', {
-                                expiresIn: 90000
-                            }, (err, token) => {
-                                if(err) console.error('There is some error in token', err);
-                                else {
-                                   	res.json({success:true,messageg:'Profile Updated', user:Helpers.parseUser(saved),  token: `Bearer ${token}`, });
-                                }
-                            });
-				
-		
-		})
-		.catch(err=>console.log(err));
-		
-	
-});
+    User.findById(user._id)
+      .then(found => {
+        found.salutation = body.salutation ? body.salutation.toLowerCase() : "";
+        found.residence = body.residence;
+        found.idNumber = body.idNumber;
+        found.isSetUp = true;
+        found.phone_number.alt = body.alt_phone_number;
+
+        return found;
+      })
+      .then(found => {
+        return found.save();
+      })
+      .then(saved => {
+        const payload = Helpers.parseUser(saved);
+
+        jwt.sign(
+          payload,
+          "secret",
+          {
+            expiresIn: 90000
+          },
+          (err, token) => {
+            if (err) console.error("There is some error in token", err);
+            else {
+              res.json({
+                success: true,
+                messageg: "Profile Updated",
+                user: Helpers.parseUser(saved),
+                token: `Bearer ${token}`
+              });
+            }
+          }
+        );
+      })
+      .catch(err => console.log(err));
+  }
+);
 
 /**
-*Endpoint for new user *Is here for postmant usage, should be deleted before putting to production*
-**/
+ *Endpoint for new user *Is here for postmant usage, should be deleted before putting to production*
+ **/
 
-router.post('/new', (req, res, next) => {
+router.post("/new", (req, res, next) => {
   const { body } = req;
- 
-  if(!body.email) {
+
+  if (!body.email) {
     return res.status(422).json({
       errors: {
-        email: 'is required',
-      },
+        email: "is required"
+      }
     });
   }
- 
-  if(!body.password) {
+
+  if (!body.password) {
     return res.status(422).json({
       errors: {
-        password: 'is required',
-      },
+        password: "is required"
+      }
     });
-  } 
-  if(!body.role) {
+  }
+  if (!body.role) {
     return res.status(422).json({
       errors: {
-        role: 'is required',
-      },
+        role: "is required"
+      }
     });
-  } 
-  
- if(!body.password) {
+  }
+
+  if (!body.password) {
     return res.status(422).json({
       errors: {
-        password: 'is required',
-      },
+        password: "is required"
+      }
     });
-  } 
-  if(!body.password_2) {
+  }
+  if (!body.password_2) {
     return res.status(422).json({
       errors: {
-        password_2: 'is required',
-      },
+        password_2: "is required"
+      }
     });
-  } 
-  if(body.password!=body.password_2) {
+  }
+  if (body.password != body.password_2) {
     return res.status(422).json({
       errors: {
-        password: 'Passwords do not match',
-      },
+        password: "Passwords do not match"
+      }
     });
-  } 
-  
- 
-    User.findOne({
-        email: body.email
-    }).then(user => {
-        if(user) {
-            return res.status(200).json({success:false,message:'Username already exists'});
-        }
-        else {
-       
-            const newUser = new User({
-                username: body.username,
-                email: body.email,
-                role: body.role,
-                password: body.password,
-               
+  }
+
+  User.findOne({
+    email: body.email
+  })
+    .then(user => {
+      if (user) {
+        return res
+          .status(200)
+          .json({ success: false, message: "Username already exists" });
+      } else {
+        const newUser = new User({
+          username: body.username,
+          email: body.email,
+          role: body.role,
+          password: body.password
+        });
+
+        bcrypt.genSalt(10, (err, salt) => {
+          if (err) console.error("There was an error", err);
+          else {
+            bcrypt.hash(newUser.password, salt, (err, hash) => {
+              if (err) console.error("There was an error", err);
+              else {
+                newUser.password = hash;
+                newUser.save().then(user => {
+                  user = user.toObject();
+                  delete user.password;
+                  const payload = {
+                    id: user._id,
+                    username: user.username,
+                    role: user.role,
+                    email: user.email,
+                    isSetUp: user.isSetUp
+                  };
+                  jwt.sign(
+                    payload,
+                    "secret",
+                    {
+                      expiresIn: 90000
+                    },
+                    (err, token) => {
+                      if (err)
+                        console.error("There is some error in token", err);
+                      else {
+                        res.json({
+                          success: true,
+                          token: `Bearer ${token}`,
+
+                          message: "User added succe"
+                        });
+                      }
+                    }
+                  );
+                });
+              }
             });
-            
-            bcrypt.genSalt(10, (err, salt) => {
-                if(err) console.error('There was an error', err);
-                else {
-                    bcrypt.hash(newUser.password, salt, (err, hash) => {
-                        if(err) console.error('There was an error', err);
-                        else {
-                            newUser.password = hash;
-                            newUser
-                                .save()
-                                .then(user => {
-                                   
-                                    user = user.toObject();
-                                    delete user.password;
-                                      const payload = {
-                                        id: user._id,
-                                        username: user.username,
-                                        role: user.role,
-                                        email:user.email,
-                                        isSetUp:user.isSetUp,
-                                    }
-                                    jwt.sign(payload, 'secret', {
-                                        expiresIn:90000
-                                    }, (err, token) => {
-                                        if(err) console.error('There is some error in token', err);
-                                        else {
-                                            res.json({
-                                                success: true,
-                                                token: `Bearer ${token}`,
-                                               
-                                                message:'User added succe'
-                                            });
-                                        }
-                                    });
-                                   
-                                }); 
-                        }
-                    });
-                }
-            });
-        }
-        })
-		.catch((err)=>{console.log(err)})
-	;
-           
-        
-    
-  
-});
-
-
-/**
-*Endpoint for deleting users, should be moved to admin, and modified so that an admin cannot delete themself accidentally*
-**/
-router.post('/remove',passport.authenticate('jwt', { session: false }),(req,res)=>{
-	const { body } = req;
-	const { user } = req;
-	//console.log(user);
-	//return
-   if(user.role=='admin'){
-			User.find({email:body.email}).remove(err=>{
-               if(err){
-				   return res.status(400).json({success:false,message:err.message});
-			   }else{
-				    return res.status(200).json({success:true,message:'User Successfully removed'});
-			   }
-			});				
-	}
-	else if(user.role=='principal'){
-		
-		User.findById(body.id)
-			.then(founduser=>{
-			//console.log(founduser);
-			
-				if(founduser.role=='admin'){
-					return res.status(400).json({success:false,message:'You are unauthorized to remove the admin'});
-				}else{
-					founduser.remove(()=>{
-						return res.status(200).json({success:true,message:'User Successfully removed'});
-					});
-					
-				}
-			});
-	}else{
-		return res.status(400).json({success:false,message:'You are unauthorized to perform the action'});
-	}
-		
-});
-
-
-/**
-*Endpoint for fetching user profile, remain incase needed for future use*
-**/
-router.post('/profile', passport.authenticate('jwt', { session: false }), (req, res) => {
-  
-   User.findById(req.user.id)
-       .then((user)=>{
-         user = user.toObject()
-         delete user.password;
-         delete user.updatedAt;
-         delete user.__v;
-         delete user.role;
-         console.log(user)
-         res.json({success:true,message:'Query successful', user:user})
-       })
-       .catch((err)=>{
-         console.log(err)
-       })
+          }
+        });
+      }
+    })
+    .catch(err => {
+      console.log(err);
+    });
 });
 
 /**
-*Endpoint for upadting user profile, *Should be modified to allow greater client side control*
-**/
-router.post('/update_profile', passport.authenticate('jwt', { session: false }), (req, res) => {
+ *Endpoint for deleting users, should be moved to admin, and modified so that an admin cannot delete themself accidentally*
+ **/
+router.post(
+  "/remove",
+  passport.authenticate("jwt", { session: false }),
+  (req, res) => {
     const { body } = req;
-    console.log('[data of request]', req.body)
-   User.findOneAndUpdate({_id:req.user.id},{email:body.email,fname:body.fname,lname:body.lname,phone_number:body.phone_number}, {new: true})
-       .then((user)=>{
-        user = user.toObject()
+    const { user } = req;
+    //console.log(user);
+    //return
+    if (user.role == "admin") {
+      User.find({ email: body.email }).remove(err => {
+        if (err) {
+          return res.status(400).json({ success: false, message: err.message });
+        } else {
+          return res
+            .status(200)
+            .json({ success: true, message: "User Successfully removed" });
+        }
+      });
+    } else if (user.role == "principal") {
+      User.findById(body.id).then(founduser => {
+        //console.log(founduser);
+
+        if (founduser.role == "admin") {
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: "You are unauthorized to remove the admin"
+            });
+        } else {
+          founduser.remove(() => {
+            return res
+              .status(200)
+              .json({ success: true, message: "User Successfully removed" });
+          });
+        }
+      });
+    } else {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "You are unauthorized to perform the action"
+        });
+    }
+  }
+);
+
+/**
+ *Endpoint for fetching user profile, remain incase needed for future use*
+ **/
+router.post(
+  "/profile",
+  passport.authenticate("jwt", { session: false }),
+  (req, res) => {
+    User.findById(req.user.id)
+      .then(user => {
+        user = user.toObject();
         delete user.password;
         delete user.updatedAt;
         delete user.__v;
         delete user.role;
-         console.log(user)
-         res.json({success:true,message:'Query successful', user:user})
-       })
-       .catch((err)=>{
-         console.log(err);
-       });
-});
+        console.log(user);
+        res.json({ success: true, message: "Query successful", user: user });
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  }
+);
 
 /**
-*Endpoint for a user to change their password*
-**/
-router.post('/update_password', passport.authenticate('jwt', { session: false }), (req, res) => {
+ *Endpoint for upadting user profile, *Should be modified to allow greater client side control*
+ **/
+router.post(
+  "/update_profile",
+  passport.authenticate("jwt", { session: false }),
+  (req, res) => {
     const { body } = req;
-    const { user } = req;
-    
-  let email = user.email;
-  let password = body.opass;
-	console.log(user);
-	
-    let errors ={};
-    User.findOne({email})
-        .then(user => {
-
-            if(!user) {
-              
-             
-                return res.status(200).json({success:false,message:'Failed to update password!'});
-            }
-		
-                bcrypt.compare(password, user.password)
-                        .then(isMatch => {
-						
-                            if(isMatch) {
-                               bcrypt.genSalt(10, (err, salt) => {
-                                if(err) console.error('There was an error', err);
-                                else {
-                                    bcrypt.hash(body.newpass, salt, (err, hash) => {
-                                        if(err) console.error('There was an error', err);
-                                        else {
-                                            user.password = hash;
-                                            user
-                                                .save()
-                                                .then(user => {
-                                                  
-                                                     return res.status(200).json({success:true,message:'Password updated successfully'});
-                                                }); 
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                        else {
-                             return res.status(200).json({success:false,message:'Old password is invalid!'});
-                       }
-                    });
-        });
-  
- 
-});
-/**
-*Endpoint for new auth token, may be usefull in refresh tokens, or after profile change*
-**/
-router.post('/new_token',passport.authenticate('jwt',{session:false}),(req,res,next)=>{
-    const { user } = req;
-    const { body } = req;
-    console.log('[user in new token request]');
-    
-              const payload = {
-                                id: user.id,
-                                username: user.username,
-                                role: user.role,
-                                email:user.email,
-                                isSetUp:user.isSetUp,
-                            }
-                            jwt.sign(payload, 'secret', {
-                                expiresIn: 90000
-                            }, (err, token) => {
-                                if(err) console.error('There is some error in token', err);
-                                else {
-                                    res.json({
-                                        success: true,
-                                        token: `Bearer ${token}`,
-                                        user_id:user._id,
-                                        message:'new token recieved'
-                                    });
-                                }
-                            });
-});
-
-/**
-*Endpoint for setting  reset token.*
-**/
-router.post('/resetToken', (req, res, next) => {
-  const { body } = req;
-
-  if(!body.email) {
-    return res.status(422).json({
-      errors: {
-        email: 'is required',
+    console.log("[data of request]", req.body);
+    User.findOneAndUpdate(
+      { _id: req.user.id },
+      {
+        email: body.email,
+        fname: body.fname,
+        lname: body.lname,
+        phone_number: body.phone_number
       },
+      { new: true }
+    )
+      .then(user => {
+        user = user.toObject();
+        delete user.password;
+        delete user.updatedAt;
+        delete user.__v;
+        delete user.role;
+        console.log(user);
+        res.json({ success: true, message: "Query successful", user: user });
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  }
+);
+
+/**
+ *Endpoint for a user to change their password*
+ **/
+router.post(
+  "/update_password",
+  passport.authenticate("jwt", { session: false }),
+  (req, res) => {
+    const { body } = req;
+    const { user } = req;
+
+    let email = user.email;
+    let password = body.opass;
+    console.log(user);
+
+    let errors = {};
+    User.findOne({ email }).then(user => {
+      if (!user) {
+        return res
+          .status(200)
+          .json({ success: false, message: "Failed to update password!" });
+      }
+
+      bcrypt.compare(password, user.password).then(isMatch => {
+        if (isMatch) {
+          bcrypt.genSalt(10, (err, salt) => {
+            if (err) console.error("There was an error", err);
+            else {
+              bcrypt.hash(body.newpass, salt, (err, hash) => {
+                if (err) console.error("There was an error", err);
+                else {
+                  user.password = hash;
+                  user.save().then(user => {
+                    return res
+                      .status(200)
+                      .json({
+                        success: true,
+                        message: "Password updated successfully"
+                      });
+                  });
+                }
+              });
+            }
+          });
+        } else {
+          return res
+            .status(200)
+            .json({ success: false, message: "Old password is invalid!" });
+        }
+      });
     });
   }
-	let token = generator.generate({
-					length: 12,
-					numbers: true,
-					upercase:true,
-					symbol:true
-				});
-	let expires = new Date();
-	console.log(expires.getHours());
-	expires.setHours(expires.getHours()+1);
- 	console.log(expires.getHours());
-    User.findOneAndUpdate({email:body.email}, {reset:{token,expires:expires}})
-        .then(user => {
-					 const smtpTransport = Nodemailer.createTransport({
-                                                           host: 'smtp.gmail.com',
-                                                           port: 465,
-                                                           secure: true,
-                                                           auth: {
-                                                                 type: 'OAuth2',
-                                                                 user: 'devteamke2018@gmail.com',
-                                                             clientId: '719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com',
-														  clientSecret: 'I5wZkEJ--0dNg5slemh7R33Z',
-														  refreshToken: '1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs'
-                                                            }
-                                                });
-                                            
-                                                let mailOptions = {
-                                                    to: user.email,
-                                                    from:'devteamke2018@gmail.com',
-                                                    subject:'Password Reset',
-                                                    html:'<h4>Dear sir/madam,</h4>  Click the link below to reset your password. ' + '<p>Link:<b> https://school-system-ajske.run.goorm.io/reset/' +token+'</b> ' 																+ '<p> If you did not request a password reset ignore this email.' 
-                                                    };
-                                                    smtpTransport.sendMail(mailOptions,(err,info)=>{
-                                                        if(err){
-                                                            return res.status(400).json({success:false,message:err.message});
-                                                        }else{
-                                                           return res.json({success:true, message:'Reset link sent, check your email address, \n It expires in an hour !'});
-                                                        }
-                                                    });
-		
-			
-		})
-        .catch(err=>{
-		console.log(err);
-		});
+);
+/**
+ *Endpoint for new auth token, may be usefull in refresh tokens, or after profile change*
+ **/
+router.post(
+  "/new_token",
+  passport.authenticate("jwt", { session: false }),
+  (req, res, next) => {
+    const { user } = req;
+    const { body } = req;
+    console.log("[user in new token request]");
 
-  
+    const payload = {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      email: user.email,
+      isSetUp: user.isSetUp
+    };
+    jwt.sign(
+      payload,
+      "secret",
+      {
+        expiresIn: 90000
+      },
+      (err, token) => {
+        if (err) console.error("There is some error in token", err);
+        else {
+          res.json({
+            success: true,
+            token: `Bearer ${token}`,
+            user_id: user._id,
+            message: "new token recieved"
+          });
+        }
+      }
+    );
+  }
+);
 
+/**
+ *Endpoint for setting  reset token.*
+ **/
+router.post("/resetToken", (req, res, next) => {
+  const { body } = req;
 
+  if (!body.email) {
+    return res.status(422).json({
+      errors: {
+        email: "is required"
+      }
+    });
+  }
+  let token = generator.generate({
+    length: 12,
+    numbers: true,
+    upercase: true,
+    symbol: true
+  });
+  let expires = new Date();
+  console.log(expires.getHours());
+  expires.setHours(expires.getHours() + 1);
+  console.log(expires.getHours());
+  User.findOneAndUpdate(
+    { email: body.email },
+    { reset: { token, expires: expires } }
+  )
+    .then(user => {
+      const smtpTransport = Nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: {
+          type: "OAuth2",
+          user: "devteamke2018@gmail.com",
+          clientId:
+            "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
+          clientSecret: "I5wZkEJ--0dNg5slemh7R33Z",
+          refreshToken: "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
+        }
+      });
+
+      let mailOptions = {
+        to: user.email,
+        from: "devteamke2018@gmail.com",
+        subject: "Password Reset",
+        html:
+          "<h4>Dear sir/madam,</h4>  Click the link below to reset your password. " +
+          "<p>Link:<b> https://school-system-ajske.run.goorm.io/reset/" +
+          token +
+          "</b> " +
+          "<p> If you did not request a password reset ignore this email."
+      };
+      smtpTransport.sendMail(mailOptions, (err, info) => {
+        if (err) {
+          return res.status(400).json({ success: false, message: err.message });
+        } else {
+          return res.json({
+            success: true,
+            message:
+              "Reset link sent, check your email address, \n It expires in an hour !"
+          });
+        }
+      });
+    })
+    .catch(err => {
+      console.log(err);
+    });
 });
 /**
-*Endpoint for checking if reset token is valid.*
-**/
+ *Endpoint for checking if reset token is valid.*
+ **/
 
-router.post('/checkingToken', (req, res, next) => {
+router.post("/checkingToken", (req, res, next) => {
   const { body } = req;
   const now = new Date();
-  User.findOne({'reset.token':body.token, 'reset.expires':{$gt:now}})
-	  .then((user)=>{
-	  	  console.log('[user from token]',user);
-	  
-		  if(user){
-				res.json({success:true, _id:user._id});
-		  }else{
-				res.json({success:false, message:'Invalid or expired reset token',});
-		  }
-	  
-	  })
-	  .catch(err=>console.log(err));
-	
-	
-	
+  User.findOne({ "reset.token": body.token, "reset.expires": { $gt: now } })
+    .then(user => {
+      console.log("[user from token]", user);
+
+      if (user) {
+        res.json({ success: true, _id: user._id });
+      } else {
+        res.json({ success: false, message: "Invalid or expired reset token" });
+      }
+    })
+    .catch(err => console.log(err));
 });
 
 /**
-*Endpoint for reseting password*
-**/
+ *Endpoint for reseting password*
+ **/
 
-router.post('/resetPassword', (req, res, next) => {
+router.post("/resetPassword", (req, res, next) => {
   const { body } = req;
-	let password = body.password; 
-	 User.findOne({'reset.token':body.token })
-	  .then((user)=>{
-	  	  console.log('[user from token]',user);
-	  
-		  if(user){
-			
-			  
-			   bcrypt.genSalt(10, (err, salt) => {
-					if(err) console.error('There was an error', err);
-					else {
-						bcrypt.hash(password, salt, (err, hash) => {
-							if(err) return	res.json({success:false, message:'Failed to reset your password!'});
-							else {
-								user.password =hash;
-								user.reset ={};
-								user.save().
-									then(()=>{
-										res.json({success:true, message:'Your password reset was successful!'});
-									})
-									.catch((err)=>res.json({success:false, message:'Failed to reset your password!'}));
-							}
-						});
-					}
-				});
-			  
-			  
-			  
-		  }else{
-				res.json({success:false, message:'Invalid or expired reset token',});
-		  }
-	  
-	  })
-	  .catch(err=>console.log(err));
+  let password = body.password;
+  User.findOne({ "reset.token": body.token })
+    .then(user => {
+      console.log("[user from token]", user);
+
+      if (user) {
+        bcrypt.genSalt(10, (err, salt) => {
+          if (err) console.error("There was an error", err);
+          else {
+            bcrypt.hash(password, salt, (err, hash) => {
+              if (err)
+                return res.json({
+                  success: false,
+                  message: "Failed to reset your password!"
+                });
+              else {
+                user.password = hash;
+                user.reset = {};
+                user
+                  .save()
+                  .then(() => {
+                    res.json({
+                      success: true,
+                      message: "Your password reset was successful!"
+                    });
+                  })
+                  .catch(err =>
+                    res.json({
+                      success: false,
+                      message: "Failed to reset your password!"
+                    })
+                  );
+              }
+            });
+          }
+        });
+      } else {
+        res.json({ success: false, message: "Invalid or expired reset token" });
+      }
+    })
+    .catch(err => console.log(err));
 });
 /*returns all users */
-
 
 // router.get('/all', (req, res, next) => {
 //     return res.send('all');
@@ -561,10 +611,9 @@ router.post('/resetPassword', (req, res, next) => {
 //   });
 // });
 // router.get('/policy', (req, res, next) => {
- 
+
 //   return res.render("policy.ejs");
 // });
-
 
 // router.patch('/:id', (req, res, next) => {
 //   const { body } = req;
@@ -591,19 +640,15 @@ router.post('/resetPassword', (req, res, next) => {
 //     .then(() => res.sendStatus(200))
 //     .catch(next);
 // });
-const parseUser  = (user) =>{
-	
-	if(user.role=="admin"){
-		delete user.students;
-		delete user.trainers;
-		delete user.instructors;
-		delete user.courses;
-		
-		
-	}
-	delete user.password;
-	delete user.__v;
-	return user;
-	
-}
+const parseUser = user => {
+  if (user.role == "admin") {
+    delete user.students;
+    delete user.trainers;
+    delete user.instructors;
+    delete user.courses;
+  }
+  delete user.password;
+  delete user.__v;
+  return user;
+};
 module.exports = router;

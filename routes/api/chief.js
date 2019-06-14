@@ -19,6 +19,13 @@ const Helpers = require("../../helpers/index");
 //
 const ObjectId = mongoose.Types.ObjectId;
 
+// let names = [];
+// let collections = mongoose.connections[0].collections;
+// Object.keys(collections).forEach(function(k) {
+//   names.push(k);
+// });
+// console.log("collections", names);
+//
 /**
  *Endpoint for registering admins *should allow checking if email was sent*
  **/
@@ -27,16 +34,16 @@ router.post(
   passport.authenticate("jwt", { session: false }),
   Middleware.isChief,
   async (req, res, next) => {
-    const { body } = req;
+    let { body } = req;
 
     console.log(body);
     //const p=Lowercase(...body);
     if (body.role == "trainer") {
       let school = await School.findById(body.school);
-      body.county = school.county;
-      body.sub_county = school.sub_county;
+      body = { ...body, county: school.county, sub_county: school.sub_county };
       console.log("[trainer body]", body);
     }
+    //return res.send("err");
     let password = generator.generate({
       length: 8,
       numbers: true,
@@ -179,8 +186,8 @@ router.post(
     if (!names.includes("parents")) {
       Parent.createCollection();
     }
-    await Student.createCollection();
 
+    await Student.createCollection();
     if (!names.includes("students")) {
     }
 
@@ -260,7 +267,7 @@ router.post(
 
         console.log("[createdStudent ID ]", obj.student);
         console.log("[created###Parent]", obj.parent);
-        if (typeof obj.parent == "array") {
+        if (Array.isArray(obj.parent)) {
           obj.parent[0].students.push(obj.student[0]._id);
 
           return obj.parent[0]
@@ -640,7 +647,6 @@ router.post(
     if (body.query) {
       ft = {
         $or: [
-          { email: { $regex: body.query, $options: "i" } },
           { fname: { $regex: body.query, $options: "i" } },
 
           { lname: { $regex: body.query, $options: "i" } }
@@ -651,9 +657,7 @@ router.post(
     // 	console.log('[filter]', ft);
     // console.log('[type]', st);
     let aggregate = Student.aggregate()
-      .match({
-        _id: { $ne: user._id }
-      })
+      .match(ft)
       .lookup({
         from: "users",
         let: { userId: "$addedBy" },
@@ -720,6 +724,7 @@ router.post(
     let ft = {};
 
     if (body.query) {
+      body.query = Helpers.kebab(body.query);
       ft = {
         $or: [
           { name: { $regex: body.query, $options: "i" } },
@@ -733,6 +738,7 @@ router.post(
     // 	console.log('[filter]', ft);
     // console.log('[type]', st);
     let aggregate = School.aggregate()
+      .match(ft)
 
       .lookup({
         from: "users",
@@ -773,6 +779,7 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
+
     School.find()
       .then(schools => {
         console.log("found schools", schools);
@@ -797,7 +804,7 @@ router.patch(
     const { user } = req;
 
     let school = {
-      name: body.name,
+      name: Helpers.kebab(body.name),
       county: body.county,
       sub_county: body.sub_county
     };

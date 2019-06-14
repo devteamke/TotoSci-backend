@@ -29,8 +29,7 @@ SchoolsSchema.methods.toJSON = function() {
     county: this.county,
     sub_county: this.sub_county,
     addedBy: this.addedBy,
-    
-    
+
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
   };
