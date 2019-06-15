@@ -305,7 +305,7 @@ router.patch(
 router.patch(
   "/save_profile",
   passport.authenticate("jwt", { session: false }),
-  Middleware.isManager,
+  Middleware.isTrainer,
   (req, res, next) => {
     const { user } = req.body;
     let user2 = { ...user };
