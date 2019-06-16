@@ -834,20 +834,18 @@ router.patch(
   passport.authenticate("jwt", { session: false }),
   Middleware.isChief,
   (req, res, next) => {
-    const { student } = req.body;
-    let student2 = { ...student };
+    const { body } = req;
+    console.log(body);
 
-    delete student2.parent;
-    delete student2.addedBy;
-    delete student2.createdAt;
-    delete student2.updatedAt;
-    delete student2._id;
-    delete student2.__v;
     // console.log("[student]", student2);
-    Student.findOneAndUpdate({ _id: student._id }, student2, {
-      new: true,
-      projection: { password: 0, __v: 0 }
-    })
+    Student.findOneAndUpdate(
+      { _id: body._id },
+      { school: body.school, fname: body.fname, lname: body.lname },
+      {
+        new: true,
+        projection: { password: 0, __v: 0 }
+      }
+    )
       .then(updatedStudent => {
         return School.findById(updatedStudent.school).then(school => {
           console.log("found school", school);

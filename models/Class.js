@@ -2,36 +2,37 @@ const mongoose = require("mongoose");
 
 const { Schema } = mongoose;
 
-const ClassSchema = new Schema({
-    
-    course:{
-        type:Schema.ObjectId,
-        ref:'CoursesSchema',
-        
+const ClassSchema = new Schema(
+  {
+    name: {
+      type: String
     },
-    
-    students:[{
-        type:Schema.ObjectId,
-        ref:'StudentsSchema',
-        
-    }]
-    ,
-    trainer:        {
-        type:Schema.ObjectId,
-        ref:'UsersSchema',
-        
+
+    course: {
+      type: Schema.ObjectId,
+      ref: "CoursesSchema"
     },
-    
-    instructors: [{
-        type:Schema.ObjectId,
-        ref:'UsersSchema',
-        
-    }]
-        
-    
-    
-    
-}, { timestamps: true });
+
+    students: [
+      {
+        type: Schema.ObjectId,
+        ref: "StudentsSchema"
+      }
+    ],
+    trainer: {
+      type: Schema.ObjectId,
+      ref: "UsersSchema"
+    },
+
+    instructors: [
+      {
+        type: Schema.ObjectId,
+        ref: "UsersSchema"
+      }
+    ]
+  },
+  { timestamps: true }
+);
 
 ClassSchema.methods.toJSON = function() {
   return {

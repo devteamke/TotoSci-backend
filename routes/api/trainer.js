@@ -5,6 +5,8 @@ const jwt = require("jsonwebtoken");
 const passport = require("passport");
 const User = mongoose.model("Users");
 const Student = mongoose.model("Students");
+const Course = mongoose.model("Courses");
+const Class = mongoose.model("Class");
 const Middleware = require("../../Middleware/index");
 const Validator = require("validator");
 const Nodemailer = require("nodemailer");
@@ -177,7 +179,7 @@ router.post(
  *Endpoint fo getting a paginated list of all instructors
  **/
 router.post(
-  "/all",
+  "/all_instructors",
   passport.authenticate("jwt", { session: false }),
   Middleware.isTrainer,
   (req, res, next) => {
@@ -194,6 +196,80 @@ router.post(
 
           { status: { $regex: body.query, $options: "i" } },
           { lname: { $regex: body.query, $options: "i" } }
+        ]
+      };
+    }
+
+    // 	console.log('[filter]', ft);
+    // console.log('[type]', st);
+    let aggregate = User.aggregate()
+      .match({
+        $and: [
+          { $or: st },
+          ft,
+          {
+            _id: { $ne: user._id }
+          }
+        ]
+      })
+      .lookup({
+        from: "users",
+        let: { userId: "$addedBy" },
+        pipeline: [
+          { $addFields: { userId: { $toObjectId: "$userId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+          { $project: { fname: 1, lname: 1 } }
+        ],
+
+        as: "addedBy"
+      })
+      .lookup({
+        from: "schools",
+        let: { schoolId: "$school" },
+        pipeline: [
+          { $addFields: { schoolId: { $toObjectId: "$schoolId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$schoolId"] } } },
+          { $project: { name: 1, county: 1, sub_county: 1 } }
+        ],
+
+        as: "school"
+      })
+      .project({
+        password: 0,
+        isSetUp: 0
+      });
+
+    User.aggregatePaginate(aggregate, {
+      page: body.page,
+      limit: body.limit
+    })
+      .then(result => {
+        console.log("[results]", result);
+        res.status(200).json({ success: true, result: result });
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  }
+);
+/**
+ *Endpoint fo getting a paginated list of all class
+ **/
+router.post(
+  "/all_classes",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isTrainer,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+    let st = [{ role: "instructor" }];
+    let ft = {};
+
+    if (body.query) {
+      ft = {
+        $or: [
+          { name: { $regex: body.query, $options: "i" } },
+          { fname: { $regex: body.query, $options: "i" } }
         ]
       };
     }
@@ -333,105 +409,33 @@ router.patch(
 );
 
 router.post(
-  "/new_student",
+  "/new_class",
   passport.authenticate("jwt", { session: false }),
   (req, res, next) => {
     const { body } = req;
 
     console.log(body);
-    //const p=Lowercase(...body);
 
-    return;
-    let password = generator.generate({
-      length: 8,
-      numbers: true,
-      upercase: true,
-      symbol: true
-    });
-    let sendpasssword = password;
+    let newClass = {
+      name: "",
+      start_time: { hour: "", period: "" },
+      duration: { hours: "", min: "" },
+      day: ""
+    };
+  }
+);
 
-    User.findOne({
-      $or: [{ email: body.email }]
-    }).then(user => {
-      if (user) {
-        return res
-          .status(200)
-          .json({ success: false, message: "Email is  already use!" });
-      } else {
-        const newUser = new User({
-          ...body,
+router.post(
+  "/fetch_courses",
+  passport.authenticate("jwt", { session: false }),
+  (req, res, next) => {
+    Course.find().then(courses => {
+      console.log("courses", courses);
 
-          addedBy: req.user._id,
-          password: password
-        });
-
-        bcrypt.genSalt(10, (err, salt) => {
-          if (err) console.error("There was an error", err);
-          else {
-            bcrypt.hash(newUser.password, salt, (err, hash) => {
-              if (err) console.error("There was an error", err);
-              else {
-                newUser.password = hash;
-                newUser.save().then(user => {
-                  const smtpTransport = Nodemailer.createTransport({
-                    host: "smtp.gmail.com",
-                    port: 465,
-                    secure: true,
-                    auth: {
-                      type: "OAuth2",
-                      user: "devteamke2018@gmail.com",
-                      clientId:
-                        "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
-                      clientSecret: "I5wZkEJ--0dNg5slemh7R33Z",
-                      refreshToken:
-                        "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
-                    }
-                  });
-                  let as;
-                  as =
-                    user.role.indexOf("-") > 0
-                      ? Helpers.capitalize(
-                          user.role.split("-")[0] +
-                            " " +
-                            Helpers.capitalize(user.role.split("-")[1])
-                        )
-                      : Helpers.capitalize(user.role);
-
-                  let mailOptions = {
-                    to: user.email,
-                    from: "devteamke2018@gmail.com",
-                    subject: "TotoSci Academy",
-                    html:
-                      "<h4>Hello " +
-                      Helpers.capitalize(user.fname) +
-                      ",</h4>  You have been  added to TotoSci Academy  as a " +
-                      as +
-                      "<p>Login with the following details: " +
-                      "<p><b>Email</b>: " +
-                      user.email +
-                      "</p><p> <b>Password</b>: " +
-                      sendpasssword +
-                      "</p>"
-                  };
-                  smtpTransport.sendMail(mailOptions, (err, info) => {
-                    if (err) {
-                      return res
-                        .status(400)
-                        .json({ success: false, message: err.message });
-                    } else {
-                      return res.status(200).json({
-                        success: true,
-                        message:
-                          "Registration successful.An email has been sent to the new user for login details!"
-                      });
-                    }
-                  });
-                });
-              }
-            });
-          }
-        });
-      }
+      return res.json({
+        success: true,
+        courses: courses
+      });
     });
   }
 );
