@@ -24,7 +24,7 @@ const ObjectId = mongoose.Types.ObjectId;
 // Object.keys(collections).forEach(function(k) {
 //   names.push(k);
 // });
-// console.log("collections", names);
+// //console.log("collections", names);
 //
 /**
  *Endpoint for registering admins *should allow checking if email was sent*
@@ -36,12 +36,12 @@ router.post(
   async (req, res, next) => {
     let { body } = req;
 
-    console.log(body);
+    //console.log(body);
     //const p=Lowercase(...body);
     if (body.role == "trainer") {
       let school = await School.findById(body.school);
       body = { ...body, county: school.county, sub_county: school.sub_county };
-      console.log("[trainer body]", body);
+      //console.log("[trainer body]", body);
     }
     //return res.send("err");
     let password = generator.generate({
@@ -147,7 +147,7 @@ router.post(
   passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
-    console.log("[new_student ]", body);
+    //console.log("[new_student ]", body);
 
     let student = {
       fname: body.studentFname,
@@ -241,7 +241,7 @@ router.post(
 
       .then(user => {
         //Create new student
-        console.log("createdParent", user);
+        //console.log("createdParent", user);
 
         return Student.create(
           [
@@ -265,8 +265,8 @@ router.post(
 
         //get student session
 
-        console.log("[createdStudent ID ]", obj.student);
-        console.log("[created###Parent]", obj.parent);
+        //console.log("[createdStudent ID ]", obj.student);
+        //console.log("[created###Parent]", obj.parent);
         if (Array.isArray(obj.parent)) {
           obj.parent[0].students.push(obj.student[0]._id);
 
@@ -289,7 +289,7 @@ router.post(
       })
       .then(obj => {
         //create parent account
-        console.log("[created student]", obj.student);
+        //console.log("[created student]", obj.student);
         if (body.isSponsored || body.existingParent) {
           return { student: obj.student };
         }
@@ -306,8 +306,8 @@ router.post(
             student: obj.student /* parent account*/
           };
         });
-        // console.log("ParrentAcc", parentAcc);
-        // console.log(obj);
+        // //console.log("ParrentAcc", parentAcc);
+        // //console.log(obj);
       })
       .then(obj => {
         // Create student fee
@@ -385,8 +385,8 @@ router.post(
       })
       .catch(err => {
         session.abortTransaction();
-        console.log(err);
-        console.log(err.message);
+        //console.log(err);
+        //console.log(err.message);
         if (err.message == "email in use") {
           return res
             .status(200)
@@ -405,7 +405,7 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
-    console.log(body);
+    //console.log(body);
 
     Course.findOne({ name: { $regex: body.name, $options: "i" } })
       .then(foundcourse => {
@@ -426,7 +426,7 @@ router.post(
       })
 
       .catch(err => {
-        console.log(err);
+        //console.log(err);
         return res.status(400).json({ success: false, message: err.message });
       });
   }
@@ -463,7 +463,7 @@ router.post(
       })
 
       .catch(err => {
-        console.log(err);
+        //console.log(err);
         return res.status(400).json({ success: false, message: err.message });
       });
   }
@@ -480,7 +480,7 @@ router.post(
     const { user } = req;
     let st = [{ role: "parent" }];
     let ft = {};
-    console.log(body, user);
+    //console.log(body, user);
 
     if (body.query) {
       ft = {
@@ -493,8 +493,8 @@ router.post(
       };
     }
 
-    // 	console.log('[filter]', ft);
-    // console.log('[type]', st);
+    // 	//console.log('[filter]', ft);
+    // //console.log('[type]', st);
     let aggregate = Course.aggregate()
       .match(ft)
       .lookup({
@@ -514,11 +514,11 @@ router.post(
       limit: body.limit
     })
       .then(result => {
-        console.log("[results]", result);
+        //console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {
-        console.log(err);
+        //console.log(err);
       });
   }
 );
@@ -550,13 +550,13 @@ router.post(
         return result.map(each => {
           return Helpers.parseUser(each);
         });
-        console.log("[results]", result);
+        //console.log("[results]", result);
       })
       .then(result => {
         res.status(200).json({ success: true, parents: result });
       })
       .catch(err => {
-        console.log(err);
+        //console.log(err);
       });
   }
 );
@@ -590,8 +590,8 @@ router.post(
       };
     }
 
-    // 	console.log('[filter]', ft);
-    // console.log('[type]', st);
+    // 	//console.log('[filter]', ft);
+    // //console.log('[type]', st);
     let aggregate = User.aggregate()
       .match({
         $and: [
@@ -623,11 +623,11 @@ router.post(
       limit: body.limit
     })
       .then(result => {
-        // console.log("[results]", result);
+        // //console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {
-        console.log(err);
+        //console.log(err);
       });
   }
 );
@@ -654,8 +654,8 @@ router.post(
       };
     }
 
-    // 	console.log('[filter]', ft);
-    // console.log('[type]', st);
+    // 	//console.log('[filter]', ft);
+    // //console.log('[type]', st);
     let aggregate = Student.aggregate()
       .match(ft)
       .lookup({
@@ -701,11 +701,11 @@ router.post(
       limit: body.limit
     })
       .then(result => {
-        console.log("[results]", result);
+        //console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {
-        console.log(err);
+        //console.log(err);
       });
   }
 );
@@ -735,8 +735,8 @@ router.post(
       };
     }
 
-    // 	console.log('[filter]', ft);
-    // console.log('[type]', st);
+    // 	//console.log('[filter]', ft);
+    // //console.log('[type]', st);
     let aggregate = School.aggregate()
       .match(ft)
 
@@ -761,11 +761,11 @@ router.post(
       limit: body.limit
     })
       .then(result => {
-        console.log("[results]", result);
+        //console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {
-        console.log(err);
+        //console.log(err);
       });
   }
 );
@@ -782,11 +782,11 @@ router.post(
 
     School.find()
       .then(schools => {
-        console.log("found schools", schools);
+        //console.log("found schools", schools);
         res.json({ success: true, schools: schools });
       })
       .catch(err => {
-        console.log(err);
+        //console.log(err);
       });
   }
 );
@@ -808,13 +808,13 @@ router.patch(
       county: body.county,
       sub_county: body.sub_county
     };
-    console.log(body);
+    //console.log(body);
 
     School.findOneAndUpdate({ _id: body._id }, school, {
       new: true
     })
       .then(newSchool => {
-        console.log("New School", newSchool);
+        //console.log("New School", newSchool);
         newSchool = newSchool.toObject();
         res.json({
           success: true,
@@ -835,9 +835,9 @@ router.patch(
   Middleware.isChief,
   (req, res, next) => {
     const { body } = req;
-    console.log(body);
+    //console.log(body);
 
-    // console.log("[student]", student2);
+    // //console.log("[student]", student2);
     Student.findOneAndUpdate(
       { _id: body._id },
       { school: body.school, fname: body.fname, lname: body.lname },
@@ -848,7 +848,7 @@ router.patch(
     )
       .then(updatedStudent => {
         return School.findById(updatedStudent.school).then(school => {
-          console.log("found school", school);
+          //console.log("found school", school);
           let arr = [];
           arr[0] = school._doc;
           updatedStudent.toObject();
@@ -858,7 +858,7 @@ router.patch(
       })
 
       .then(updatedStudent => {
-        console.log("{new}", updatedStudent);
+        //console.log("{new}", updatedStudent);
 
         res.json({
           success: true,
@@ -887,13 +887,13 @@ router.patch(
       charge: body.charge,
       description: body.description
     };
-    console.log(body);
+    //console.log(body);
 
     Course.findOneAndUpdate({ _id: body._id }, course, {
       new: true
     })
       .then(newCourse => {
-        console.log("New Course", newCourse);
+        //console.log("New Course", newCourse);
         newCourse = newCourse.toObject();
         res.json({
           success: true,
@@ -933,7 +933,7 @@ router.patch(
               { new: true, projection: { password: 0 } }
             )
               .then(user => {
-                console.log("{new}", user);
+                //console.log("{new}", user);
 
                 res.json({ success: true, message: "User password updated!" });
               })
@@ -967,13 +967,13 @@ router.patch(
     delete user2.createdAt;
     delete user2._id;
     delete user2.__v;
-    console.log("[user]", user);
+    //console.log("[user]", user);
     User.findOneAndUpdate({ _id: user._id }, user2, {
       new: true,
       projection: { password: 0, __v: 0 }
     })
       .then(newUser => {
-        console.log("{new}", newUser);
+        //console.log("{new}", newUser);
         newUser = newUser.toObject();
         res.json({
           success: true,

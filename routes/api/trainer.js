@@ -244,7 +244,7 @@ router.post(
       limit: body.limit
     })
       .then(result => {
-        console.log("[results]", result);
+        //console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {
@@ -253,42 +253,78 @@ router.post(
   }
 );
 /**
+ *Endpoint for adding new class
+ **/
+router.post(
+  "/new_class",
+  passport.authenticate("jwt", { session: false }),
+
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+    console.log(body);
+    body.name = Helpers.kebab(body.name);
+
+    Class.findOne({ name: { $regex: body.name, $options: "i" } })
+      .then(foundclass => {
+        if (foundclass) {
+          return res
+            .status(403)
+            .json({ success: false, message: "Class already exists" });
+        } else {
+          let newSchool = new Class({
+            ...body,
+            trainer: user._id
+          });
+          console.log(newSchool);
+
+          newSchool.save();
+          return res
+            .status(200)
+            .json({ success: true, message: "New class added successfully " });
+        }
+      })
+
+      .catch(err => {
+        console.log(err);
+        return res.status(400).json({ success: false, message: err.message });
+      });
+  }
+);
+
+/**
  *Endpoint fo getting a paginated list of all class
  **/
 router.post(
   "/all_classes",
   passport.authenticate("jwt", { session: false }),
-  Middleware.isTrainer,
+
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
-    let st = [{ role: "instructor" }];
+
     let ft = {};
 
     if (body.query) {
+      body.query = Helpers.kebab(body.query);
       ft = {
         $or: [
           { name: { $regex: body.query, $options: "i" } },
-          { fname: { $regex: body.query, $options: "i" } }
+          { course: { $regex: body.query, $options: "i" } },
+
+          { day: { $regex: body.query, $options: "i" } }
         ]
       };
     }
 
-    // 	console.log('[filter]', ft);
-    // console.log('[type]', st);
-    let aggregate = User.aggregate()
-      .match({
-        $and: [
-          { $or: st },
-          ft,
-          {
-            _id: { $ne: user._id }
-          }
-        ]
-      })
+    // 	//console.log('[filter]', ft);
+    // //console.log('[type]', st);
+    let aggregate = Class.aggregate()
+      .match(ft)
+
       .lookup({
         from: "users",
-        let: { userId: "$addedBy" },
+        let: { userId: "$trainer" },
         pipeline: [
           { $addFields: { userId: { $toObjectId: "$userId" } } },
           { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
@@ -297,23 +333,22 @@ router.post(
 
         as: "addedBy"
       })
-      .lookup({
-        from: "schools",
-        let: { schoolId: "$school" },
-        pipeline: [
-          { $addFields: { schoolId: { $toObjectId: "$schoolId" } } },
-          { $match: { $expr: { $eq: ["$_id", "$$schoolId"] } } },
-          { $project: { name: 1, county: 1, sub_county: 1 } }
-        ],
-
-        as: "school"
-      })
       .project({
         password: 0,
         isSetUp: 0
-      });
+      })
+      .lookup({
+        from: "courses",
+        let: { courseId: "$course" },
+        pipeline: [
+          { $addFields: { courseId: { $toObjectId: "$courseId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$courseId"] } } },
+          { $project: { name: 1 } }
+        ],
 
-    User.aggregatePaginate(aggregate, {
+        as: "courseName"
+      });
+    Class.aggregatePaginate(aggregate, {
       page: body.page,
       limit: body.limit
     })
@@ -322,11 +357,10 @@ router.post(
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {
-        console.log(err);
+        //console.log(err);
       });
   }
 );
-
 /**
  *Endpoint for changing subordinates password
  **/
@@ -408,22 +442,10 @@ router.patch(
   }
 );
 
-router.post(
-  "/new_class",
-  passport.authenticate("jwt", { session: false }),
-  (req, res, next) => {
-    const { body } = req;
+/**
+*Endpoint for fetching courses
 
-    console.log(body);
-
-    let newClass = {
-      name: "",
-      start_time: { hour: "", period: "" },
-      duration: { hours: "", min: "" },
-      day: ""
-    };
-  }
-);
+**/
 
 router.post(
   "/fetch_courses",
@@ -437,6 +459,142 @@ router.post(
         courses: courses
       });
     });
+  }
+);
+/**
+*Endpoint for fetching students for adding
+
+**/
+
+router.post(
+  "/fetch_students",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    console.log("body", body);
+    try {
+      let ids = body._class.students.map(each => {
+        return mongoose.Types.ObjectId(each);
+      });
+      //Not in the class
+      console.log("ids", ids);
+      let students;
+
+      if (!body.inClass) {
+        students = await Student.find({
+          _id: {
+            $nin: ids
+          }
+        });
+      } else {
+        students = await Student.find({
+          _id: {
+            $in: ids
+          }
+        });
+      }
+      students = students.map((each, i) => {
+        return { ...each._doc, key: i };
+      });
+      console.log("students", students);
+      res.json({ success: true, students });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
+
+/**
+*
+* Endpoint for adding students to class
+
+**/
+
+router.post(
+  "/add_students_to_class",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    try {
+      let ids = body.students.map(each => {
+        return mongoose.Types.ObjectId(each._id);
+      });
+
+      let newClass = await Class.findOneAndUpdate(
+        { _id: body.class_id },
+        { $push: { students: { $each: ids } } },
+        { new: true }
+      );
+      ids = newClass.students.map(each => {
+        return mongoose.Types.ObjectId(each._id);
+      });
+      let students = await Student.find({
+        _id: {
+          $in: ids
+        }
+      });
+      students = students.map((each, i) => {
+        return { ...each._doc, key: i };
+      });
+      console.log("new class", newClass);
+      //  console.log("students", students);
+      res.json({
+        success: true,
+        students: students,
+        newClass: newClass._doc,
+        message: "Students added successfully"
+      });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
+/**
+*
+* Endpoint for removing students from class 
+
+**/
+
+router.post(
+  "/remove_students",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    try {
+      let ids = body.students.map(each => {
+        return mongoose.Types.ObjectId(each._id);
+      });
+
+      let newClass = await Class.findOneAndUpdate(
+        { _id: body.class_id },
+        { $pull: { students: { $in: ids } } },
+        { new: true }
+      );
+      ids = newClass.students.map(each => {
+        return mongoose.Types.ObjectId(each._id);
+      });
+      let students = await Student.find({
+        _id: {
+          $in: ids
+        }
+      });
+      students = students.map((each, i) => {
+        return { ...each._doc, key: i };
+      });
+      console.log("new class", newClass);
+      //  console.log("students", students);
+      res.json({
+        success: true,
+        students: students,
+        newClass: newClass._doc,
+        message: "Students removed successfully"
+      });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
   }
 );
 
