@@ -782,11 +782,11 @@ router.post(
 
     School.find()
       .then(schools => {
-        //console.log("found schools", schools);
-        res.json({ success: true, schools: schools });
+        console.log("found schools", schools);
+        res.status(200).json({ success: true, schools: schools });
       })
       .catch(err => {
-        //console.log(err);
+        console.log(err);
       });
   }
 );
@@ -816,7 +816,7 @@ router.patch(
       .then(newSchool => {
         //console.log("New School", newSchool);
         newSchool = newSchool.toObject();
-        res.json({
+        res.status(200).json({
           success: true,
           school: newSchool,
           message: "School details updated!"
@@ -962,7 +962,7 @@ router.patch(
   (req, res, next) => {
     const { user } = req.body;
     let user2 = { ...user };
-
+    console.log(user);
     delete user2.createdAt;
     delete user2.createdAt;
     delete user2._id;

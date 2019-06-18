@@ -51,6 +51,7 @@ require("./models/Courses");
 require("./models/Parents");
 require("./models/Schools");
 require("./models/Class");
+require("./models/Attendance");
 
 require("./passport")(passport);
 // Add routes

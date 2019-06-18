@@ -7,6 +7,7 @@ const User = mongoose.model("Users");
 const Student = mongoose.model("Students");
 const Course = mongoose.model("Courses");
 const Class = mongoose.model("Class");
+const Attendance = mongoose.model("Attendance");
 const Middleware = require("../../Middleware/index");
 const Validator = require("validator");
 const Nodemailer = require("nodemailer");
@@ -297,7 +298,6 @@ router.post(
  **/
 router.post(
   "/all_classes",
-  passport.authenticate("jwt", { session: false }),
 
   (req, res, next) => {
     const { body } = req;
@@ -348,6 +348,7 @@ router.post(
 
         as: "courseName"
       });
+
     Class.aggregatePaginate(aggregate, {
       page: body.page,
       limit: body.limit
@@ -597,5 +598,303 @@ router.post(
     }
   }
 );
+/**
+*
+* Endpoint for marking attendance
+
+**/
+
+router.post(
+  "/mark_attendance",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    try {
+      let present = body.students.map(each => {
+        // console.log("each", each._id);
+        return each._id;
+      });
+
+      // let class_ids = body._class.students.map(each => {
+      //   return each;
+      // });
+      // Get absent
+      //   let absent = class_ids.filter(x => !attended_ids.includes(x));
+
+      console.log("attended:", present.length);
+      // console.log("class:", class_ids.length);
+
+      const { values } = body;
+      console.log("[values]", values);
+      let attendance = {
+        ...values,
+        _class: body._class._id,
+        present
+      };
+
+      let savedAtt = await Attendance.create(attendance);
+      console.log("saved", savedAtt);
+      res.json({
+        success: true,
+
+        message: "Attendance  updated successfully"
+      });
+      // let newClass = await Class.findOneAndUpdate(
+      //   { _id: body.class_id },
+      //   { $pull: { students: { $in: ids } } },
+      //   { new: true }
+      // );
+      // ids = newClass.students.map(each => {
+      //   return mongoose.Types.ObjectId(each._id);
+      // });
+      // let students = await Student.find({
+      //   _id: {
+      //     $in: ids
+      //   }
+      // });
+      // students = students.map((each, i) => {
+      //   return { ...each._doc, key: i };
+      // });
+      // console.log("new class", newClass);
+      // //  console.log("students", students);
+      // res.json({
+      //   success: true,
+      //   students: students,
+      //   newClass: newClass._doc,
+      //   message: "Students removed successfully"
+      // });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
+/**
+*
+* Endpoint for marking attendance
+
+**/
+
+router.post(
+  "/fetch_attendance",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    try {
+      let ids = body._class.students.map(each => {
+        return mongoose.Types.ObjectId(each);
+      });
+      let lessons = await Attendance.find({ _class: body._class._id }).sort({
+        createdAt: 1
+      });
+      let students = await Student.find({
+        _id: {
+          $in: ids
+        }
+      });
+      //console.log("[ lessons ]", lessons);
+      console.log("[ students ]", students.length);
+      let attendance = [];
+      students.map((student, i) => {
+        let data = {
+          key: i,
+          _id: student._id,
+          name:
+            Helpers.capitalize(student.fname) +
+            " " +
+            Helpers.capitalize(student.lname)
+        };
+        let l = {};
+        lessons.map((lesson, i) => {
+          //console.log(lesson.present.indexOf(student._id) > 0);
+          if (lesson.present.indexOf(student._id) > -1) {
+            //attended
+            l[i + 1] = "<b>true</b>";
+          } else {
+            //missed
+            l[i + 1] = false;
+          }
+        });
+        data = { ...data, ...l };
+        attendance.push(data);
+      });
+      console.log("[ attendance ]", attendance);
+      let columnsA = [];
+      if (attendance.length > 0) {
+        let keys = Object.keys(attendance[0]);
+
+        keys.map(key => {
+          let e = {};
+          if (key == "key") {
+            return;
+          }
+          if (key == "_id") {
+            return;
+          }
+          if (key == "name") {
+            return;
+            columnsA.unshift({
+              title: "Name",
+              dataIndex: key
+            });
+            return;
+          }
+          columnsA.push({
+            title: "Lesson " + key,
+            dataIndex: key
+          });
+        });
+        console.log(columnsA);
+      }
+
+      res.json({
+        success: true,
+        attendance,
+        columnsA,
+        message: "Attendance  fetched successfully"
+      });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
+
+/**
+*Endpoint for fetching instructors for adding
+
+**/
+
+router.post(
+  "/fetch_instructors",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    console.log("body", body);
+    try {
+      let ids = body._class.instructors.map(each => {
+        return mongoose.Types.ObjectId(each);
+      });
+      //Not in the class
+      console.log("ids", ids);
+      let instructors = await User.find({
+        $and: [
+          {
+            _id: {
+              $nin: ids
+            }
+          },
+          { role: "instructor" }
+        ]
+      });
+
+      instructors = instructors.map((each, i) => {
+        return { ...each._doc, key: i };
+      });
+      console.log("students", instructors);
+      res.json({ success: true, instructors });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
+
+/**
+*Endpoint for fetching instructors for in class
+
+**/
+
+router.post(
+  "/fetch_class_instructors",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    console.log("body", body);
+    try {
+      let ids = body._class.instructors.map(each => {
+        return mongoose.Types.ObjectId(each);
+      });
+      //in the class
+      console.log("ids", ids);
+      let instructors = await User.find({
+        $and: [
+          {
+            _id: {
+              $in: ids
+            }
+          },
+          { role: "instructor" }
+        ]
+      });
+
+      // instructors = instructors.map((each, i) => {
+      //   return { ...each._doc, key: i };
+      // });
+      //console.log("students", instructors);
+      res.json({ success: true, instructors });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
+
+/**
+*
+* Endpoint for adding instructors to class
+
+**/
+
+router.post(
+  "/add_instructors_to_class",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    try {
+      let ids = body.instructors.map(each => {
+        return mongoose.Types.ObjectId(each._id);
+      });
+
+      let newClass = await Class.findOneAndUpdate(
+        { _id: body.class_id },
+        { $push: { instructors: { $each: ids } } },
+        { new: true }
+      );
+      ids = newClass.students.map(each => {
+        return mongoose.Types.ObjectId(each._id);
+      });
+      let instructors = await User.find({
+        $and: [
+          {
+            _id: {
+              $in: ids
+            }
+          },
+          { role: "instructor" }
+        ]
+      });
+      instructors = instructors.map((each, i) => {
+        return { ...each._doc, key: i };
+      });
+      console.log("new class", newClass);
+      //  console.log("students", students);
+      res.json({
+        success: true,
+        instructors: instructors,
+        newClass: newClass._doc,
+        message: "Instructor(s) added successfully"
+      });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
 
 module.exports = router;
+Array.prototype.diff = function(a) {
+  return this.filter(function(i) {
+    return a.indexOf(i) < 0;
+  });
+};
