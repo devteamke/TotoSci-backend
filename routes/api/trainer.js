@@ -861,14 +861,14 @@ router.post(
         { $push: { instructors: { $each: ids } } },
         { new: true }
       );
-      ids = newClass.students.map(each => {
-        return mongoose.Types.ObjectId(each._id);
-      });
+      // ids = newClass.students.map(each => {
+      //   return mongoose.Types.ObjectId(each._id);
+      // });
       let instructors = await User.find({
         $and: [
           {
             _id: {
-              $in: ids
+              $in: newClass.instructors
             }
           },
           { role: "instructor" }
@@ -884,6 +884,66 @@ router.post(
         instructors: instructors,
         newClass: newClass._doc,
         message: "Instructor(s) added successfully"
+      });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
+/**
+*
+* Endpoint for removing instructors 
+
+**/
+
+router.post(
+  "/remove_instructor",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    console.log("body", body);
+    try {
+      let id = body.instructor._id;
+
+      let newClass = await Class.findOneAndUpdate(
+        { _id: body.class_id },
+        { $pull: { instructors: id } },
+        { new: true }
+      );
+      // ids = newClass.students.map(each => {
+      //   return mongoose.Types.ObjectId(each._id);
+      // });
+      // let students = await Student.find({
+      //   _id: {
+      //     $in: ids
+      //   }
+      // });
+      // students = students.map((each, i) => {
+      //   return { ...each._doc, key: i };
+      // });
+      let ids = newClass.instructors.map(each => {
+        return mongoose.Types.ObjectId(each);
+      });
+      //in the class
+      console.log("ids", ids);
+      let instructors = await User.find({
+        $and: [
+          {
+            _id: {
+              $in: ids
+            }
+          },
+          { role: "instructor" }
+        ]
+      });
+      console.log("new class", newClass);
+      //  console.log("students", students);
+      res.json({
+        success: true,
+        instructors: instructors,
+        newClass: newClass._doc,
+        message: "Instructor removed successfully"
       });
     } catch (err) {
       console.log(err);

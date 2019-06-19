@@ -503,7 +503,7 @@ router.post(
         pipeline: [
           { $addFields: { userId: { $toObjectId: "$userId" } } },
           { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
-          { $project: { fname: 1, lname: 1 } }
+          { $project: { fname: 1, lname: 1, email: 1, role: 1 } }
         ],
 
         as: "addedBy"
@@ -905,6 +905,33 @@ router.patch(
   }
 );
 /**
+ *Endpoint for deleting Course
+ **/
+
+router.delete(
+  "/delete_course",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    console.log(body);
+
+    Course.findOneAndDelete({ _id: body._id })
+      .then(newCourse => {
+        //console.log("New Course", newCourse);
+        // newCourse = newCourse.toObject();
+        res.json({
+          success: true,
+
+          message: "Course deleted successfully!"
+        });
+      })
+      .catch(err => console.log(err));
+  }
+);
+/**
  *Endpoint for changing subordinates password
  **/
 
@@ -960,15 +987,14 @@ router.patch(
   passport.authenticate("jwt", { session: false }),
   Middleware.isChief,
   (req, res, next) => {
-    const { user } = req.body;
-    let user2 = { ...user };
-    console.log(user);
-    delete user2.createdAt;
-    delete user2.createdAt;
+    const { body } = req;
+    let user2 = { ...body };
+    console.log(req.body);
+
     delete user2._id;
-    delete user2.__v;
+
     //console.log("[user]", user);
-    User.findOneAndUpdate({ _id: user._id }, user2, {
+    User.findOneAndUpdate({ _id: body._id }, user2, {
       new: true,
       projection: { password: 0, __v: 0 }
     })
