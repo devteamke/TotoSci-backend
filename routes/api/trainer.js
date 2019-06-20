@@ -671,7 +671,7 @@ router.post(
 );
 /**
 *
-* Endpoint for marking attendance
+* Endpoint for fetching attendance
 
 **/
 
@@ -799,7 +799,36 @@ router.post(
     }
   }
 );
+/**
+*Endpoint for fetching instructors for adding
 
+**/
+
+router.post(
+  "/fetch_instructor_class",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    // console.log("body", body);
+    try {
+      let id = body._id;
+      //Not in the class
+      console.log("ids", id);
+      let classes = await Class.find({ instructors: { $in: [id] } });
+
+      //console.log("Classes", classes);
+
+      classes = classes.map((each, i) => {
+        return { ...each._doc, key: i };
+      });
+      console.log("Classes", classes);
+      res.json({ success: true, _class: classes });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
 /**
 *Endpoint for fetching instructors for in class
 

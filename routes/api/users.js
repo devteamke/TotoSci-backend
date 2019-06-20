@@ -4,7 +4,10 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const passport = require("passport");
 const User = mongoose.model("Users");
+
 const Student = mongoose.model("Students");
+const Course = mongoose.model("Courses");
+
 const Middleware = require("../../Middleware/index");
 const Nodemailer = require("nodemailer");
 const xoauth2 = require("xoauth2");
@@ -267,12 +270,10 @@ router.post(
         //console.log(founduser);
 
         if (founduser.role == "admin") {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              message: "You are unauthorized to remove the admin"
-            });
+          return res.status(400).json({
+            success: false,
+            message: "You are unauthorized to remove the admin"
+          });
         } else {
           founduser.remove(() => {
             return res
@@ -282,12 +283,10 @@ router.post(
         }
       });
     } else {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "You are unauthorized to perform the action"
-        });
+      return res.status(400).json({
+        success: false,
+        message: "You are unauthorized to perform the action"
+      });
     }
   }
 );
@@ -381,12 +380,10 @@ router.post(
                 else {
                   user.password = hash;
                   user.save().then(user => {
-                    return res
-                      .status(200)
-                      .json({
-                        success: true,
-                        message: "Password updated successfully"
-                      });
+                    return res.status(200).json({
+                      success: true,
+                      message: "Password updated successfully"
+                    });
                   });
                 }
               });
@@ -437,6 +434,126 @@ router.post(
         }
       }
     );
+  }
+);
+/**
+ *Endpoint for fetching dashboard data
+ **/
+router.post(
+  "/dash_data",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { user } = req;
+    const { body } = req;
+    try {
+      let students = await Student.find().countDocuments();
+      let students_male = await Student.find({
+        gender: "male"
+      }).countDocuments();
+      let students_female = await Student.find({
+        gender: "female"
+      }).countDocuments();
+      let trainers = await User.find({ role: "trainer" }).countDocuments();
+      let trainers_male = await User.find({
+        role: "trainer",
+        gender: "male"
+      }).countDocuments();
+      let trainers_female = await User.find({
+        role: "trainer",
+        gender: "female"
+      }).countDocuments();
+      let instructors = await User.find({
+        role: "instructor"
+      }).countDocuments();
+      let instructors_male = await User.find({
+        role: "instructor",
+        gender: "male"
+      }).countDocuments();
+      let instructors_female = await User.find({
+        role: "instructor",
+        gender: "female"
+      }).countDocuments();
+      let courses = await Course.find({}).countDocuments();
+      let studentsRegistrations = await Student.aggregate([
+        {
+          $project: {
+            month: { $month: "$createdAt" }
+          }
+        },
+        {
+          $group: {
+            _id: "$month",
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      const month = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December"
+      ];
+
+      let getMonthData = new Promise((resolve, reject) => {
+        let count = 0;
+        let month2 = studentsRegistrations[0]._id;
+        for (let i = 0; i <= 6; i++) {
+          console.log(i, studentsRegistrations[i]);
+          if (studentsRegistrations[i] !== undefined) {
+            studentsRegistrations[i] = {
+              x: month[month2 - 1],
+              y: studentsRegistrations[i].count
+            };
+          } else if (studentsRegistrations[i] == undefined) {
+            console.log(i);
+            let j = i;
+            studentsRegistrations.push({
+              x: month[month2 - 1],
+              y: 0
+            });
+          }
+          if (month2 == 1) {
+            month2 = 13;
+          }
+          if (count == 6) {
+            resolve();
+            break;
+          }
+          count++;
+          month2--;
+        }
+      });
+      await getMonthData;
+      console.log("students no", students);
+      console.log("trainers", trainers);
+      console.log("instructors", instructors);
+      console.log("courses", courses);
+      console.log("student registrations", studentsRegistrations);
+      res.json({
+        success: true,
+        students,
+        students_male,
+        students_female,
+        trainers,
+        trainers_male,
+        trainers_female,
+        instructors,
+        instructors_male,
+        instructors_female,
+        courses,
+        studentsRegistrations
+      });
+    } catch (err) {
+      console.log(err);
+    }
   }
 );
 

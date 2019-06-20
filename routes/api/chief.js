@@ -7,6 +7,7 @@ const User = mongoose.model("Users");
 const Student = mongoose.model("Students");
 const Course = mongoose.model("Courses");
 const Parent = mongoose.model("Parents");
+const Class = mongoose.model("Class");
 const School = mongoose.model("Schools");
 const Middleware = require("../../Middleware/index");
 const Validator = require("validator");
@@ -570,12 +571,8 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
-    let st = [
-      { role: "chief-trainer" },
-      { role: "trainer" },
+    let st = [{ role: "trainer" }, { role: "instructor" }];
 
-      { role: "instructor" }
-    ];
     let ft = {};
 
     if (body.query) {
@@ -585,7 +582,8 @@ router.post(
           { fname: { $regex: body.query, $options: "i" } },
           { role: { $regex: body.query, $options: "i" } },
           { status: { $regex: body.query, $options: "i" } },
-          { lname: { $regex: body.query, $options: "i" } }
+          { lname: { $regex: body.query, $options: "i" } },
+          { sub_county: { $regex: body.query, $options: "i" } }
         ]
       };
     }
@@ -597,6 +595,7 @@ router.post(
         $and: [
           { $or: st },
           ft,
+          { county: { $regex: user.county, $options: "i" } },
           {
             _id: { $ne: user._id }
           }
@@ -931,6 +930,85 @@ router.delete(
       .catch(err => console.log(err));
   }
 );
+/**
+*
+* Endpoint for removing instructors 
+
+**/
+
+router.delete(
+  "/remove_student",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    console.log("body", body);
+
+    let id = body._id;
+
+    Class.findOneAndUpdate(
+      { students: { $in: body._id } },
+      { $pull: { instructors: id } },
+      { new: true }
+    )
+      .then(() => {
+        Student.findOneAndDelete({ _id: id }).then(deletedStud => {
+          res.json({
+            success: true,
+
+            message: "Student removed successfully"
+          });
+        });
+      })
+      //  console.log("students", students);
+
+      .catch(err => {
+        console.log(err);
+        res.json({ success: false, message: err.message });
+      });
+  }
+);
+router.delete(
+  "/remove_user",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    console.log("body", body);
+    let id = body._id;
+    if (body.role == "chief-trainer") {
+      return res.json({
+        success: false,
+        message: "You are not permitted for the operation"
+      });
+    }
+    User.findOneAndDelete({ _id: body._id })
+      .then(deletedUser => {
+        if (body.role == "instructor") {
+          Class.updateMany(
+            { instructors: { $in: [body._id] } },
+            { $pull: { instructors: id } }
+          );
+        } else if (body.role == "trainer") {
+          Class.updateMany(
+            { trainer: body._id },
+            { $pull: { instructors: id } }
+          );
+        } else {
+          return;
+        }
+        res.json({
+          success: true,
+
+          message: "User removed successfully"
+        });
+      })
+
+      .catch(err => {
+        console.log(err);
+        res.json({ success: false, message: err.message });
+      });
+  }
+);
+
 /**
  *Endpoint for changing subordinates password
  **/
