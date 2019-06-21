@@ -588,14 +588,12 @@ router.post(
       };
     }
 
-    // 	//console.log('[filter]', ft);
-    // //console.log('[type]', st);
     let aggregate = User.aggregate()
       .match({
         $and: [
           { $or: st },
           ft,
-          { county: { $regex: user.county, $options: "i" } },
+
           {
             _id: { $ne: user._id }
           }
@@ -622,7 +620,7 @@ router.post(
       limit: body.limit
     })
       .then(result => {
-        // //console.log("[results]", result);
+        // console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {

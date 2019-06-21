@@ -52,6 +52,7 @@ require("./models/Parents");
 require("./models/Schools");
 require("./models/Class");
 require("./models/Attendance");
+require("./models/Feedback");
 
 require("./passport")(passport);
 // Add routes

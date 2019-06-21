@@ -8,6 +8,7 @@ const Student = mongoose.model("Students");
 const Course = mongoose.model("Courses");
 const Class = mongoose.model("Class");
 const Attendance = mongoose.model("Attendance");
+const Feedback = mongoose.model("Feedback");
 const Middleware = require("../../Middleware/index");
 const Validator = require("validator");
 const Nodemailer = require("nodemailer");
@@ -298,6 +299,7 @@ router.post(
  **/
 router.post(
   "/all_classes",
+  passport.authenticate("jwt", { session: false }),
 
   (req, res, next) => {
     const { body } = req;
@@ -320,7 +322,7 @@ router.post(
     // 	//console.log('[filter]', ft);
     // //console.log('[type]', st);
     let aggregate = Class.aggregate()
-      .match(ft)
+      .match({ $and: [{ trainer: user._id }, ft] })
 
       .lookup({
         from: "users",
@@ -980,7 +982,68 @@ router.post(
     }
   }
 );
+/*
+*
+* Endpoint for fetching feed back, lessons and wether the students attended
 
+**/
+
+router.post(
+  "/fetch_feed_attendance",
+  passport.authenticate("jwt", { session: false }),
+  async (req, res, next) => {
+    const { body } = req;
+    let student = body.student;
+    try {
+      let lessons = await Attendance.find({ _class: body._class._id }).sort({
+        createdAt: 1
+      });
+
+      //console.log("[ lessons ]", lessons);
+
+      let data = {
+        _id: student._id,
+        name:
+          Helpers.capitalize(student.fname) +
+          " " +
+          Helpers.capitalize(student.lname)
+      };
+      let l = {};
+      let larr = [];
+      lessons.map((lesson, i) => {
+        //console.log(lesson.present.indexOf(student._id) > 0);
+
+        if (lesson.present.indexOf(student._id) > -1) {
+          //attended
+          l[i + 1] = i + 1 + "true";
+        } else {
+          //missed
+          l[i + 1] = i + 1 + "false";
+        }
+        larr.push(l[i + 1]);
+      });
+      data = { ...data, ...l };
+      let feedback = await Feedback.find({
+        student: student._id,
+        _class: body._class._id
+      })
+        .populate({ path: "addedBy", select: "fname lname" })
+        .sort({
+          createdAt: -1
+        });
+      console.log("feedback", feedback);
+      res.json({
+        success: true,
+        attendance: larr,
+        feedback: feedback,
+        message: "Attendance  fetched successfully"
+      });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
 module.exports = router;
 Array.prototype.diff = function(a) {
   return this.filter(function(i) {

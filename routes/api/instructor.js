@@ -8,6 +8,7 @@ const Student = mongoose.model("Students");
 const Course = mongoose.model("Courses");
 const Class = mongoose.model("Class");
 const Attendance = mongoose.model("Attendance");
+const Feedback = mongoose.model("Feedback");
 const Middleware = require("../../Middleware/index");
 const Validator = require("validator");
 const Nodemailer = require("nodemailer");
@@ -24,7 +25,7 @@ const ObjectId = mongoose.Types.ObjectId;
  **/
 router.post(
   "/all_classes",
-
+  passport.authenticate("jwt", { session: false }),
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
@@ -46,7 +47,14 @@ router.post(
     // 	//console.log('[filter]', ft);
     // //console.log('[type]', st);
     let aggregate = Class.aggregate()
-      .match(ft)
+      .match({
+        $and: [
+          ft,
+          {
+            instructors: { $in: [user._id] }
+          }
+        ]
+      })
 
       .lookup({
         from: "users",
@@ -321,12 +329,20 @@ router.post(
         larr.push(l[i + 1]);
       });
       data = { ...data, ...l };
+      let feedback = await Feedback.find({
+        student: student._id,
+        _class: body._class._id
+      })
+        .populate({ path: "addedBy", select: "fname lname" })
+        .sort({
+          createdAt: -1
+        });
 
-      console.log("attendance", larr);
+      console.log("feedback", feedback);
       res.json({
         success: true,
         attendance: larr,
-
+        feedback: feedback,
         message: "Attendance  fetched successfully"
       });
     } catch (err) {
@@ -347,13 +363,22 @@ router.post(
     const { body } = req;
 
     try {
-      console.log("body feedback", body);
-      // res.json({
-      //   success: true,
-      //   attendance: larr,
+      let feedback = {
+        _class: body.data.class_id,
+        student: body.data.student_id,
+        lesson: body.data.lesson,
+        remarks: body.data.remarks,
+        addedBy: req.user._id
+      };
 
-      //   message: "Attendance  fetched successfully"
-      // });
+      let savedFeed = await Feedback.create(feedback);
+      console.log("saved feedback", savedFeed);
+      res.json({
+        success: true,
+
+        savedFeed,
+        message: "Feedback saved successfully"
+      });
     } catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });

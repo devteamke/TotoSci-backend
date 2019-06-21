@@ -506,7 +506,7 @@ router.post(
         let count = 0;
         let month2 = studentsRegistrations[0]._id;
         for (let i = 0; i <= 6; i++) {
-          console.log(i, studentsRegistrations[i]);
+          //   console.log(i, studentsRegistrations[i]);
           if (studentsRegistrations[i] !== undefined) {
             studentsRegistrations[i] = {
               x: month[month2 - 1],
@@ -536,7 +536,7 @@ router.post(
       console.log("trainers", trainers);
       console.log("instructors", instructors);
       console.log("courses", courses);
-      console.log("student registrations", studentsRegistrations);
+      //  console.log("student registrations", studentsRegistrations);
       res.json({
         success: true,
         students,
