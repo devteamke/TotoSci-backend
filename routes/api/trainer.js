@@ -66,13 +66,14 @@ router.post(
       .then(() => {
         //Create instructor
         return User.findOne({
-          email: body.email
-        })
+            email: body.email
+          })
 
           .then(user => {
             if (user) {
               throw new Error("Email is already in use");
-            } else {
+            }
+            else {
               let password = sendpasssword;
 
               return bcrypt.genSalt(10).then(salt => {
@@ -83,15 +84,12 @@ router.post(
           .then(obj => {
             return bcrypt.hash(obj.password, obj.salt).then(hash => {
               return User.create(
-                [
-                  {
-                    ...body,
+                [{
+                  ...body,
 
-                    addedBy: req.user._id,
-                    password: hash
-                  }
-                ],
-                { session: session }
+                  addedBy: req.user._id,
+                  password: hash
+                }], { session: session }
               ).then(saved => {
                 return saved;
               });
@@ -120,28 +118,26 @@ router.post(
           auth: {
             type: "OAuth2",
             user: "devteamke2018@gmail.com",
-            clientId:
-              "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
+            clientId: "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
             clientSecret: "I5wZkEJ--0dNg5slemh7R33Z",
             refreshToken: "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
           }
         });
         let as;
         as =
-          user.role.indexOf("-") > 0
-            ? Helpers.capitalize(
-                user.role.split("-")[0] +
-                  " " +
-                  Helpers.capitalize(user.role.split("-")[1])
-              )
-            : Helpers.capitalize(user.role);
+          user.role.indexOf("-") > 0 ?
+          Helpers.capitalize(
+            user.role.split("-")[0] +
+            " " +
+            Helpers.capitalize(user.role.split("-")[1])
+          ) :
+          Helpers.capitalize(user.role);
 
         let mailOptions = {
           to: user.email,
           from: "devteamke2018@gmail.com",
           subject: "TotoSci Academy",
-          html:
-            "<h4>Hello " +
+          html: "<h4>Hello " +
             Helpers.capitalize(user.fname) +
             ",</h4>  You have been  added to TotoSci Academy  as a " +
             as +
@@ -155,7 +151,8 @@ router.post(
         smtpTransport.sendMail(mailOptions, (err, info) => {
           if (err) {
             throw new Error("An error ocurred");
-          } else {
+          }
+          else {
             return;
           }
         });
@@ -165,8 +162,7 @@ router.post(
         session.commitTransaction();
         return res.json({
           success: true,
-          message:
-            "Registration of new instructor was successful. Login details have been sent to their email address"
+          message: "Registration of new instructor was successful. Login details have been sent to their email address"
         });
       })
       .catch(err => {
@@ -189,7 +185,9 @@ router.post(
     const { user } = req;
     let st = [{ role: "instructor" }];
     let ft = {};
-
+    let ids = req.user.instructors.map(each => {
+      return mongoose.Types.ObjectId(each._id);
+    });
     if (body.query) {
       ft = {
         $or: [
@@ -211,7 +209,8 @@ router.post(
           ft,
           {
             _id: { $ne: user._id }
-          }
+          },
+          { _id: { $in: ids } }
         ]
       })
       .lookup({
@@ -242,9 +241,9 @@ router.post(
       });
 
     User.aggregatePaginate(aggregate, {
-      page: body.page,
-      limit: body.limit
-    })
+        page: body.page,
+        limit: body.limit
+      })
       .then(result => {
         //console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
@@ -273,7 +272,8 @@ router.post(
           return res
             .status(403)
             .json({ success: false, message: "Class already exists" });
-        } else {
+        }
+        else {
           let newSchool = new Class({
             ...body,
             trainer: user._id
@@ -352,9 +352,9 @@ router.post(
       });
 
     Class.aggregatePaginate(aggregate, {
-      page: body.page,
-      limit: body.limit
-    })
+        page: body.page,
+        limit: body.limit
+      })
       .then(result => {
         console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
@@ -387,11 +387,7 @@ router.patch(
               message: "Failed to update password!"
             });
           else {
-            User.findOneAndUpdate(
-              { _id: _id },
-              { password: hash },
-              { new: true, projection: { password: 0 } }
-            )
+            User.findOneAndUpdate({ _id: _id }, { password: hash }, { new: true, projection: { password: 0 } })
               .then(user => {
                 console.log("{new}", user);
 
@@ -429,9 +425,9 @@ router.patch(
     delete user2.__v;
     console.log("[user]", user);
     User.findOneAndUpdate({ _id: user._id }, user2, {
-      new: true,
-      projection: { password: 0, __v: 0 }
-    })
+        new: true,
+        projection: { password: 0, __v: 0 }
+      })
       .then(newUser => {
         console.log("{new}", newUser);
         newUser = newUser.toObject();
@@ -472,7 +468,7 @@ router.post(
 router.post(
   "/fetch_students",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     console.log("body", body);
     try {
@@ -489,7 +485,8 @@ router.post(
             $nin: ids
           }
         });
-      } else {
+      }
+      else {
         students = await Student.find({
           _id: {
             $in: ids
@@ -501,7 +498,8 @@ router.post(
       });
       console.log("students", students);
       res.json({ success: true, students });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
@@ -517,18 +515,14 @@ router.post(
 router.post(
   "/add_students_to_class",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     try {
       let ids = body.students.map(each => {
         return mongoose.Types.ObjectId(each._id);
       });
 
-      let newClass = await Class.findOneAndUpdate(
-        { _id: body.class_id },
-        { $push: { students: { $each: ids } } },
-        { new: true }
-      );
+      let newClass = await Class.findOneAndUpdate({ _id: body.class_id }, { $push: { students: { $each: ids } } }, { new: true });
       ids = newClass.students.map(each => {
         return mongoose.Types.ObjectId(each._id);
       });
@@ -548,7 +542,8 @@ router.post(
         newClass: newClass._doc,
         message: "Students added successfully"
       });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
@@ -563,18 +558,14 @@ router.post(
 router.post(
   "/remove_students",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     try {
       let ids = body.students.map(each => {
         return mongoose.Types.ObjectId(each._id);
       });
 
-      let newClass = await Class.findOneAndUpdate(
-        { _id: body.class_id },
-        { $pull: { students: { $in: ids } } },
-        { new: true }
-      );
+      let newClass = await Class.findOneAndUpdate({ _id: body.class_id }, { $pull: { students: { $in: ids } } }, { new: true });
       ids = newClass.students.map(each => {
         return mongoose.Types.ObjectId(each._id);
       });
@@ -594,7 +585,8 @@ router.post(
         newClass: newClass._doc,
         message: "Students removed successfully"
       });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
@@ -609,7 +601,7 @@ router.post(
 router.post(
   "/mark_attendance",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     try {
       let present = body.students.map(each => {
@@ -665,7 +657,8 @@ router.post(
       //   newClass: newClass._doc,
       //   message: "Students removed successfully"
       // });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
@@ -680,7 +673,7 @@ router.post(
 router.post(
   "/fetch_attendance",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     try {
       let ids = body._class.students.map(each => {
@@ -701,8 +694,7 @@ router.post(
         let data = {
           key: i,
           _id: student._id,
-          name:
-            Helpers.capitalize(student.fname) +
+          name: Helpers.capitalize(student.fname) +
             " " +
             Helpers.capitalize(student.lname)
         };
@@ -712,7 +704,8 @@ router.post(
           if (lesson.present.indexOf(student._id) > -1) {
             //attended
             l[i + 1] = "<b>true</b>";
-          } else {
+          }
+          else {
             //missed
             l[i + 1] = false;
           }
@@ -755,7 +748,8 @@ router.post(
         columnsA,
         message: "Attendance  fetched successfully"
       });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
@@ -770,23 +764,25 @@ router.post(
 router.post(
   "/fetch_instructors",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     console.log("body", body);
     try {
       let ids = body._class.instructors.map(each => {
         return mongoose.Types.ObjectId(each);
       });
+      let ids2 = req.user.instructors.map(each => {
+        return mongoose.Types.ObjectId(each._id);
+      });
       //Not in the class
       console.log("ids", ids);
       let instructors = await User.find({
-        $and: [
-          {
+        $and: [{
             _id: {
               $nin: ids
             }
           },
-          { role: "instructor" }
+          { role: "instructor" }, { _id: { $in: ids2 } }
         ]
       });
 
@@ -795,21 +791,22 @@ router.post(
       });
       console.log("students", instructors);
       res.json({ success: true, instructors });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
   }
 );
 /**
-*Endpoint for fetching instructors for adding
+*Endpoint for fetching instructors * not sure
 
 **/
 
 router.post(
   "/fetch_instructor_class",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     // console.log("body", body);
     try {
@@ -825,7 +822,8 @@ router.post(
       });
       console.log("Classes", classes);
       res.json({ success: true, _class: classes });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
@@ -839,7 +837,7 @@ router.post(
 router.post(
   "/fetch_class_instructors",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     console.log("body", body);
     try {
@@ -849,8 +847,7 @@ router.post(
       //in the class
       console.log("ids", ids);
       let instructors = await User.find({
-        $and: [
-          {
+        $and: [{
             _id: {
               $in: ids
             }
@@ -864,7 +861,8 @@ router.post(
       // });
       //console.log("students", instructors);
       res.json({ success: true, instructors });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
@@ -880,24 +878,20 @@ router.post(
 router.post(
   "/add_instructors_to_class",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     try {
       let ids = body.instructors.map(each => {
         return mongoose.Types.ObjectId(each._id);
       });
 
-      let newClass = await Class.findOneAndUpdate(
-        { _id: body.class_id },
-        { $push: { instructors: { $each: ids } } },
-        { new: true }
-      );
+      let newClass = await Class.findOneAndUpdate({ _id: body.class_id }, { $push: { instructors: { $each: ids } } }, { new: true });
+      let newTrainer = User.findOneAndUpdate({ _id: req.user._id }, { $push: { instructors: { $each: ids } } }, { new: true })
       // ids = newClass.students.map(each => {
       //   return mongoose.Types.ObjectId(each._id);
       // });
       let instructors = await User.find({
-        $and: [
-          {
+        $and: [{
             _id: {
               $in: newClass.instructors
             }
@@ -916,7 +910,8 @@ router.post(
         newClass: newClass._doc,
         message: "Instructor(s) added successfully"
       });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
@@ -931,17 +926,14 @@ router.post(
 router.post(
   "/remove_instructor",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     console.log("body", body);
     try {
       let id = body.instructor._id;
 
-      let newClass = await Class.findOneAndUpdate(
-        { _id: body.class_id },
-        { $pull: { instructors: id } },
-        { new: true }
-      );
+      let newClass = await Class.findOneAndUpdate({ _id: body.class_id }, { $pull: { instructors: id } }, { new: true });
+      let newTrainer = await User.findOneAndUpdate({ _id: req.user._id }, { $pull: { instructors: id } }, { new: true });
       // ids = newClass.students.map(each => {
       //   return mongoose.Types.ObjectId(each._id);
       // });
@@ -959,8 +951,7 @@ router.post(
       //in the class
       console.log("ids", ids);
       let instructors = await User.find({
-        $and: [
-          {
+        $and: [{
             _id: {
               $in: ids
             }
@@ -976,7 +967,8 @@ router.post(
         newClass: newClass._doc,
         message: "Instructor removed successfully"
       });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }
@@ -991,7 +983,7 @@ router.post(
 router.post(
   "/fetch_feed_attendance",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     let student = body.student;
     try {
@@ -1003,8 +995,7 @@ router.post(
 
       let data = {
         _id: student._id,
-        name:
-          Helpers.capitalize(student.fname) +
+        name: Helpers.capitalize(student.fname) +
           " " +
           Helpers.capitalize(student.lname)
       };
@@ -1016,7 +1007,8 @@ router.post(
         if (lesson.present.indexOf(student._id) > -1) {
           //attended
           l[i + 1] = i + 1 + "true";
-        } else {
+        }
+        else {
           //missed
           l[i + 1] = i + 1 + "false";
         }
@@ -1024,9 +1016,9 @@ router.post(
       });
       data = { ...data, ...l };
       let feedback = await Feedback.find({
-        student: student._id,
-        _class: body._class._id
-      })
+          student: student._id,
+          _class: body._class._id
+        })
         .populate({ path: "addedBy", select: "fname lname" })
         .sort({
           createdAt: -1
@@ -1038,7 +1030,8 @@ router.post(
         feedback: feedback,
         message: "Attendance  fetched successfully"
       });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
     }

@@ -7,6 +7,8 @@ const User = mongoose.model("Users");
 
 const Student = mongoose.model("Students");
 const Course = mongoose.model("Courses");
+const Conversation = mongoose.model("Conversations");
+const Message = mongoose.model("Messages");
 
 const Middleware = require("../../Middleware/index");
 const Nodemailer = require("nodemailer");
@@ -54,8 +56,7 @@ router.post("/login", (req, res, next) => {
 
         jwt.sign(
           payload,
-          "secret",
-          {
+          "secret", {
             expiresIn: 90000
           },
           (err, token) => {
@@ -70,7 +71,8 @@ router.post("/login", (req, res, next) => {
             }
           }
         );
-      } else {
+      }
+      else {
         return res
           .status(200)
           .json({ success: false, message: "Incorrect username or password!" });
@@ -107,8 +109,7 @@ router.post(
 
         jwt.sign(
           payload,
-          "secret",
-          {
+          "secret", {
             expiresIn: 90000
           },
           (err, token) => {
@@ -181,14 +182,15 @@ router.post("/new", (req, res, next) => {
   }
 
   User.findOne({
-    email: body.email
-  })
+      email: body.email
+    })
     .then(user => {
       if (user) {
         return res
           .status(200)
           .json({ success: false, message: "Username already exists" });
-      } else {
+      }
+      else {
         const newUser = new User({
           username: body.username,
           email: body.email,
@@ -215,8 +217,7 @@ router.post("/new", (req, res, next) => {
                   };
                   jwt.sign(
                     payload,
-                    "secret",
-                    {
+                    "secret", {
                       expiresIn: 90000
                     },
                     (err, token) => {
@@ -259,13 +260,15 @@ router.post(
       User.find({ email: body.email }).remove(err => {
         if (err) {
           return res.status(400).json({ success: false, message: err.message });
-        } else {
+        }
+        else {
           return res
             .status(200)
             .json({ success: true, message: "User Successfully removed" });
         }
       });
-    } else if (user.role == "principal") {
+    }
+    else if (user.role == "principal") {
       User.findById(body.id).then(founduser => {
         //console.log(founduser);
 
@@ -274,7 +277,8 @@ router.post(
             success: false,
             message: "You are unauthorized to remove the admin"
           });
-        } else {
+        }
+        else {
           founduser.remove(() => {
             return res
               .status(200)
@@ -282,7 +286,8 @@ router.post(
           });
         }
       });
-    } else {
+    }
+    else {
       return res.status(400).json({
         success: false,
         message: "You are unauthorized to perform the action"
@@ -323,16 +328,12 @@ router.post(
   (req, res) => {
     const { body } = req;
     console.log("[data of request]", req.body);
-    User.findOneAndUpdate(
-      { _id: req.user.id },
-      {
+    User.findOneAndUpdate({ _id: req.user.id }, {
         email: body.email,
         fname: body.fname,
         lname: body.lname,
         phone_number: body.phone_number
-      },
-      { new: true }
-    )
+      }, { new: true })
       .then(user => {
         user = user.toObject();
         delete user.password;
@@ -389,7 +390,8 @@ router.post(
               });
             }
           });
-        } else {
+        }
+        else {
           return res
             .status(200)
             .json({ success: false, message: "Old password is invalid!" });
@@ -418,8 +420,7 @@ router.post(
     };
     jwt.sign(
       payload,
-      "secret",
-      {
+      "secret", {
         expiresIn: 90000
       },
       (err, token) => {
@@ -442,7 +443,7 @@ router.post(
 router.post(
   "/dash_data",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { user } = req;
     const { body } = req;
     try {
@@ -474,8 +475,7 @@ router.post(
         gender: "female"
       }).countDocuments();
       let courses = await Course.find({}).countDocuments();
-      let studentsRegistrations = await Student.aggregate([
-        {
+      let studentsRegistrations = await Student.aggregate([{
           $project: {
             month: { $month: "$createdAt" }
           }
@@ -487,19 +487,63 @@ router.post(
           }
         }
       ]);
+      let studentsRegistrationsF = await Student.aggregate([
+        { $match: { gender: 'female' } },
+        {
+
+          $project: {
+            month: { $month: "$createdAt" }
+          }
+        },
+        {
+          $group: {
+            _id: "$month",
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      let studentsRegistrationsM = await Student.aggregate([
+        { $match: { gender: 'male' } },
+        {
+
+          $project: {
+            month: { $month: "$createdAt" }
+          }
+        },
+        {
+          $group: {
+            _id: "$month",
+            count: { $sum: 1 }
+          }
+        }
+      ]);
+      // const month = [
+      //   "January",
+      //   "February",
+      //   "March",
+      //   "April",
+      //   "May",
+      //   "June",
+      //   "July",
+      //   "August",
+      //   "September",
+      //   "October",
+      //   "November",
+      //   "December"
+      // ];
       const month = [
-        "January",
-        "February",
-        "March",
-        "April",
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
         "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December"
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sept",
+        "Oct",
+        "Nov",
+        "Dec"
       ];
 
       let getMonthData = new Promise((resolve, reject) => {
@@ -512,8 +556,9 @@ router.post(
               x: month[month2 - 1],
               y: studentsRegistrations[i].count
             };
-          } else if (studentsRegistrations[i] == undefined) {
-            console.log(i);
+          }
+          else if (studentsRegistrations[i] == undefined) {
+
             let j = i;
             studentsRegistrations.push({
               x: month[month2 - 1],
@@ -531,12 +576,86 @@ router.post(
           month2--;
         }
       });
-      await getMonthData;
+      let getMonthDataM = new Promise((resolve, reject) => {
+        let count = 0;
+        let month2 = studentsRegistrationsM[0]._id;
+        for (let i = 0; i <= 6; i++) {
+          //   console.log(i, studentsRegistrations[i]);
+          if (studentsRegistrationsM[i] !== undefined) {
+            studentsRegistrationsM[i] = {
+              x: month[month2 - 1],
+              y: studentsRegistrationsM[i].count
+            };
+          }
+          else if (studentsRegistrationsM[i] == undefined) {
+
+            let j = i;
+            studentsRegistrationsM.push({
+              x: month[month2 - 1],
+              y: 0
+            });
+          }
+          if (month2 == 1) {
+            month2 = 13;
+          }
+          if (count == 6) {
+            resolve();
+            break;
+          }
+          count++;
+          month2--;
+        }
+      });
+      let getMonthDataF = new Promise((resolve, reject) => {
+        let count = 0;
+        let month2 = studentsRegistrationsF[0]._id;
+        for (let i = 0; i <= 6; i++) {
+          //   console.log(i, studentsRegistrations[i]);
+          if (studentsRegistrationsF[i] !== undefined) {
+            studentsRegistrationsF[i] = {
+              x: month[month2 - 1],
+              y: studentsRegistrationsF[i].count
+            };
+          }
+          else if (studentsRegistrationsF[i] == undefined) {
+
+            let j = i;
+            studentsRegistrationsF.push({
+              x: month[month2 - 1],
+              y: 0
+            });
+          }
+          if (month2 == 1) {
+            month2 = 13;
+          }
+          if (count == 6) {
+            resolve();
+            break;
+          }
+          count++;
+          month2--;
+        }
+      });
+
+      if (studentsRegistrations.length > 0) {
+        await getMonthData;
+      }
+      if (studentsRegistrationsM.length > 0) {
+        await getMonthDataM;
+      }
+      if (studentsRegistrationsF.length > 0) {
+        await getMonthDataF;
+      }
+      //   await getMonthDataM;
+      //   await getMonthDataF;
       console.log("students no", students);
       console.log("trainers", trainers);
       console.log("instructors", instructors);
       console.log("courses", courses);
-      //  console.log("student registrations", studentsRegistrations);
+
+      console.log("student registrations", studentsRegistrations);
+      console.log("student registrationsM", studentsRegistrationsM);
+      console.log("student registrationsF", studentsRegistrationsF);
       res.json({
         success: true,
         students,
@@ -549,9 +668,12 @@ router.post(
         instructors_male,
         instructors_female,
         courses,
-        studentsRegistrations
+        studentsRegistrations,
+        studentsRegistrationsM,
+        studentsRegistrationsF,
       });
-    } catch (err) {
+    }
+    catch (err) {
       console.log(err);
     }
   }
@@ -580,10 +702,7 @@ router.post("/resetToken", (req, res, next) => {
   console.log(expires.getHours());
   expires.setHours(expires.getHours() + 1);
   console.log(expires.getHours());
-  User.findOneAndUpdate(
-    { email: body.email },
-    { reset: { token, expires: expires } }
-  )
+  User.findOneAndUpdate({ email: body.email }, { reset: { token, expires: expires } })
     .then(user => {
       const smtpTransport = Nodemailer.createTransport({
         host: "smtp.gmail.com",
@@ -592,8 +711,7 @@ router.post("/resetToken", (req, res, next) => {
         auth: {
           type: "OAuth2",
           user: "devteamke2018@gmail.com",
-          clientId:
-            "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
+          clientId: "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
           clientSecret: "I5wZkEJ--0dNg5slemh7R33Z",
           refreshToken: "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
         }
@@ -603,8 +721,7 @@ router.post("/resetToken", (req, res, next) => {
         to: user.email,
         from: "devteamke2018@gmail.com",
         subject: "Password Reset",
-        html:
-          "<h4>Dear sir/madam,</h4>  Click the link below to reset your password. " +
+        html: "<h4>Dear sir/madam,</h4>  Click the link below to reset your password. " +
           "<p>Link:<b> https://school-system-ajske.run.goorm.io/reset/" +
           token +
           "</b> " +
@@ -613,11 +730,11 @@ router.post("/resetToken", (req, res, next) => {
       smtpTransport.sendMail(mailOptions, (err, info) => {
         if (err) {
           return res.status(400).json({ success: false, message: err.message });
-        } else {
+        }
+        else {
           return res.json({
             success: true,
-            message:
-              "Reset link sent, check your email address, \n It expires in an hour !"
+            message: "Reset link sent, check your email address, \n It expires in an hour !"
           });
         }
       });
@@ -639,7 +756,8 @@ router.post("/checkingToken", (req, res, next) => {
 
       if (user) {
         res.json({ success: true, _id: user._id });
-      } else {
+      }
+      else {
         res.json({ success: false, message: "Invalid or expired reset token" });
       }
     })
@@ -688,7 +806,8 @@ router.post("/resetPassword", (req, res, next) => {
             });
           }
         });
-      } else {
+      }
+      else {
         res.json({ success: false, message: "Invalid or expired reset token" });
       }
     })
@@ -757,6 +876,55 @@ router.post("/resetPassword", (req, res, next) => {
 //     .then(() => res.sendStatus(200))
 //     .catch(next);
 // });
+
+/**
+ *Endpoint for fetching dashboard data
+ **/
+router.post(
+  "/send_message",
+  passport.authenticate("jwt", { session: false }),
+  async(req, res, next) => {
+    const { user } = req;
+    const { body } = req;
+    let session = await Conversation.startSession();
+    session.startTransaction();
+    try {
+      console.log('body', body)
+      //check if recipient is valid
+      if (body.type == "individual") {
+        let recipient = await User.findOne({ _id: body.to });
+
+      }
+
+      //Check if conversation exists depending on type
+
+      let conversation = await Conversation.findOne({ participants: { $in: [body.to, req.user._id] } })
+      console.log('conversation', conversation)
+      if (!conversation) {
+        let newConversation = await Conversation.create({ subject: body.subject, type: body.type, participants: [body.to, req.user._id], addedBy: req.user._id }, { session: session })
+      }
+      throw new Error('haha')
+      //if existing use existing id to create message
+      //else create new  conversation and use that to create new message
+
+    }
+    catch (err) {
+      console.log(err.message)
+      await session.abortTransaction();
+      session.endSession();
+      if (err.message.includes("Cast to ObjectId failed for value")) {
+        res.json({ success: false, message: 'Invalid recipient, ensure you have selected from autocomplete' })
+      }
+      res.json({ success: false, message: err.message })
+    }
+  }
+);
+
+
+
+
+
+
 const parseUser = user => {
   if (user.role == "admin") {
     delete user.students;

@@ -5,5 +5,6 @@ router.use("/chief-trainer", require("./chief"));
 router.use("/trainer", require("./trainer"));
 router.use("/instructor", require("./instructor"));
 router.use("/users", require("./users"));
+router.use("/parent", require("./parent"));
 
 module.exports = router;

@@ -20,13 +20,7 @@ const Helpers = require("../../helpers/index");
 //
 const ObjectId = mongoose.Types.ObjectId;
 
-// let names = [];
-// let collections = mongoose.connections[0].collections;
-// Object.keys(collections).forEach(function(k) {
-//   names.push(k);
-// });
-// //console.log("collections", names);
-//
+
 /**
  *Endpoint for registering admins *should allow checking if email was sent*
  **/
@@ -34,7 +28,7 @@ router.post(
   "/register",
   passport.authenticate("jwt", { session: false }),
   Middleware.isChief,
-  async (req, res, next) => {
+  async(req, res, next) => {
     let { body } = req;
 
     //console.log(body);
@@ -60,7 +54,8 @@ router.post(
         return res
           .status(200)
           .json({ success: false, message: "Email is  already use!" });
-      } else {
+      }
+      else {
         const newUser = new User({
           ...body,
 
@@ -83,29 +78,26 @@ router.post(
                     auth: {
                       type: "OAuth2",
                       user: "devteamke2018@gmail.com",
-                      clientId:
-                        "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
+                      clientId: "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
                       clientSecret: "I5wZkEJ--0dNg5slemh7R33Z",
-                      refreshToken:
-                        "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
+                      refreshToken: "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
                     }
                   });
                   let as;
                   as =
-                    user.role.indexOf("-") > 0
-                      ? Helpers.capitalize(
-                          user.role.split("-")[0] +
-                            " " +
-                            Helpers.capitalize(user.role.split("-")[1])
-                        )
-                      : Helpers.capitalize(user.role);
+                    user.role.indexOf("-") > 0 ?
+                    Helpers.capitalize(
+                      user.role.split("-")[0] +
+                      " " +
+                      Helpers.capitalize(user.role.split("-")[1])
+                    ) :
+                    Helpers.capitalize(user.role);
 
                   let mailOptions = {
                     to: user.email,
                     from: "devteamke2018@gmail.com",
                     subject: "TotoSci Academy",
-                    html:
-                      "<h4>Hello " +
+                    html: "<h4>Hello " +
                       Helpers.capitalize(user.fname) +
                       ",</h4>  You have been  added to TotoSci Academy  as a " +
                       as +
@@ -121,11 +113,11 @@ router.post(
                       return res
                         .status(400)
                         .json({ success: false, message: err.message });
-                    } else {
+                    }
+                    else {
                       return res.status(200).json({
                         success: true,
-                        message:
-                          "Registration successful.An email has been sent to the new user for login details!"
+                        message: "Registration successful.An email has been sent to the new user for login details!"
                       });
                     }
                   });
@@ -146,7 +138,7 @@ router.post(
 router.post(
   "/new_student",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     //console.log("[new_student ]", body);
 
@@ -154,6 +146,8 @@ router.post(
       fname: body.studentFname,
       lname: body.studentLname,
       school: body.school,
+      gender: body.gender,
+      DOB: body.DOB,
       isSponsored: body.isSponsored
     };
 
@@ -189,8 +183,7 @@ router.post(
     }
 
     await Student.createCollection();
-    if (!names.includes("students")) {
-    }
+    if (!names.includes("students")) {}
 
     Promise.resolve()
       .then(() => User.startSession())
@@ -201,18 +194,21 @@ router.post(
       .then(() => {
         if (body.isSponsored) {
           return;
-        } else if (body.existingParent) {
+        }
+        else if (body.existingParent) {
           return User.findById(body.existingParent).session(session);
-        } else {
+        }
+        else {
           //Create parent
           return User.findOne({
-            email: body.email
-          })
+              email: body.email
+            })
 
             .then(user => {
               if (user) {
                 throw new Error("email in use");
-              } else {
+              }
+              else {
                 let password = sendpasssword;
 
                 return bcrypt.genSalt(10).then(salt => {
@@ -223,15 +219,12 @@ router.post(
             .then(obj => {
               return bcrypt.hash(obj.password, obj.salt).then(hash => {
                 return User.create(
-                  [
-                    {
-                      ...parent,
+                  [{
+                    ...parent,
 
-                      addedBy: req.user._id,
-                      password: hash
-                    }
-                  ],
-                  { session: session }
+                    addedBy: req.user._id,
+                    password: hash
+                  }], { session: session }
                 ).then(saved => {
                   return saved;
                 });
@@ -245,14 +238,11 @@ router.post(
         //console.log("createdParent", user);
 
         return Student.create(
-          [
-            {
-              ...student,
-              parent: user ? user._id : null,
-              addedBy: req.user._id
-            }
-          ],
-          { session: session }
+          [{
+            ...student,
+            parent: user ? user._id : null,
+            addedBy: req.user._id
+          }], { session: session }
         ).then(student => {
           return { student: student, parent: user };
         });
@@ -277,7 +267,8 @@ router.post(
             .then(parent => {
               return { parent, student };
             });
-        } else {
+        }
+        else {
           obj.parent.students.push(obj.student[0]._id);
 
           return obj.parent
@@ -295,12 +286,9 @@ router.post(
           return { student: obj.student };
         }
         return Parent.create(
-          [
-            {
-              pId: obj.parent._id
-            }
-          ],
-          { session: session }
+          [{
+            pId: obj.parent._id
+          }], { session: session }
         ).then(() => {
           return {
             parent: obj.parent,
@@ -338,28 +326,26 @@ router.post(
           auth: {
             type: "OAuth2",
             user: "devteamke2018@gmail.com",
-            clientId:
-              "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
+            clientId: "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
             clientSecret: "I5wZkEJ--0dNg5slemh7R33Z",
             refreshToken: "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
           }
         });
         let as;
         as =
-          user.role.indexOf("-") > 0
-            ? Helpers.capitalize(
-                user.role.split("-")[0] +
-                  " " +
-                  Helpers.capitalize(user.role.split("-")[1])
-              )
-            : Helpers.capitalize(user.role);
+          user.role.indexOf("-") > 0 ?
+          Helpers.capitalize(
+            user.role.split("-")[0] +
+            " " +
+            Helpers.capitalize(user.role.split("-")[1])
+          ) :
+          Helpers.capitalize(user.role);
 
         let mailOptions = {
           to: user.email,
           from: "devteamke2018@gmail.com",
           subject: "TotoSci Academy",
-          html:
-            "<h4>Hello " +
+          html: "<h4>Hello " +
             Helpers.capitalize(user.fname) +
             ",</h4>  You have been  added to TotoSci Academy  as a " +
             as +
@@ -375,7 +361,8 @@ router.post(
             return res
               .status(400)
               .json({ success: false, message: err.message });
-          } else {
+          }
+          else {
             session.commitTransaction();
             return res.status(200).json({
               success: true,
@@ -414,7 +401,8 @@ router.post(
           return res
             .status(403)
             .json({ success: false, message: "Course already exists" });
-        } else {
+        }
+        else {
           let newCourse = new Course({
             ...body,
             addedBy: user._id
@@ -451,7 +439,8 @@ router.post(
           return res
             .status(403)
             .json({ success: false, message: "School already exists" });
-        } else {
+        }
+        else {
           let newSchool = new School({
             ...body,
             addedBy: user._id
@@ -511,9 +500,9 @@ router.post(
       });
 
     Course.aggregatePaginate(aggregate, {
-      page: body.page,
-      limit: body.limit
-    })
+        page: body.page,
+        limit: body.limit
+      })
       .then(result => {
         //console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
@@ -535,18 +524,18 @@ router.post(
     const { user } = req;
 
     User.find({
-      $and: [
-        { role: "parent" },
-        {
-          $or: [
-            { email: { $regex: body.query, $options: "i" } },
-            { fname: { $regex: body.query, $options: "i" } },
+        $and: [
+          { role: "parent" },
+          {
+            $or: [
+              { email: { $regex: body.query, $options: "i" } },
+              { fname: { $regex: body.query, $options: "i" } },
 
-            { lname: { $regex: body.query, $options: "i" } }
-          ]
-        }
-      ]
-    })
+              { lname: { $regex: body.query, $options: "i" } }
+            ]
+          }
+        ]
+      })
       .then(result => {
         return result.map(each => {
           return Helpers.parseUser(each);
@@ -616,9 +605,9 @@ router.post(
       });
 
     User.aggregatePaginate(aggregate, {
-      page: body.page,
-      limit: body.limit
-    })
+        page: body.page,
+        limit: body.limit
+      })
       .then(result => {
         // console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
@@ -694,9 +683,9 @@ router.post(
       });
 
     Student.aggregatePaginate(aggregate, {
-      page: body.page,
-      limit: body.limit
-    })
+        page: body.page,
+        limit: body.limit
+      })
       .then(result => {
         //console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
@@ -754,9 +743,9 @@ router.post(
       });
 
     School.aggregatePaginate(aggregate, {
-      page: body.page,
-      limit: body.limit
-    })
+        page: body.page,
+        limit: body.limit
+      })
       .then(result => {
         //console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
@@ -808,8 +797,8 @@ router.patch(
     //console.log(body);
 
     School.findOneAndUpdate({ _id: body._id }, school, {
-      new: true
-    })
+        new: true
+      })
       .then(newSchool => {
         //console.log("New School", newSchool);
         newSchool = newSchool.toObject();
@@ -835,14 +824,10 @@ router.patch(
     //console.log(body);
 
     // //console.log("[student]", student2);
-    Student.findOneAndUpdate(
-      { _id: body._id },
-      { school: body.school, fname: body.fname, lname: body.lname },
-      {
+    Student.findOneAndUpdate({ _id: body._id }, { school: body.school, fname: body.fname, lname: body.lname }, {
         new: true,
         projection: { password: 0, __v: 0 }
-      }
-    )
+      })
       .then(updatedStudent => {
         return School.findById(updatedStudent.school).then(school => {
           //console.log("found school", school);
@@ -887,8 +872,8 @@ router.patch(
     //console.log(body);
 
     Course.findOneAndUpdate({ _id: body._id }, course, {
-      new: true
-    })
+        new: true
+      })
       .then(newCourse => {
         //console.log("New Course", newCourse);
         newCourse = newCourse.toObject();
@@ -937,17 +922,13 @@ router.delete(
 router.delete(
   "/remove_student",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     console.log("body", body);
 
     let id = body._id;
 
-    Class.findOneAndUpdate(
-      { students: { $in: body._id } },
-      { $pull: { instructors: id } },
-      { new: true }
-    )
+    Class.findOneAndUpdate({ students: { $in: body._id } }, { $pull: { instructors: id } }, { new: true })
       .then(() => {
         Student.findOneAndDelete({ _id: id }).then(deletedStud => {
           res.json({
@@ -965,10 +946,13 @@ router.delete(
       });
   }
 );
+
+
+
 router.delete(
   "/remove_user",
   passport.authenticate("jwt", { session: false }),
-  async (req, res, next) => {
+  async(req, res, next) => {
     const { body } = req;
     console.log("body", body);
     let id = body._id;
@@ -981,16 +965,12 @@ router.delete(
     User.findOneAndDelete({ _id: body._id })
       .then(deletedUser => {
         if (body.role == "instructor") {
-          Class.updateMany(
-            { instructors: { $in: [body._id] } },
-            { $pull: { instructors: id } }
-          );
-        } else if (body.role == "trainer") {
-          Class.updateMany(
-            { trainer: body._id },
-            { $pull: { instructors: id } }
-          );
-        } else {
+          Class.updateMany({ instructors: { $in: [body._id] } }, { $pull: { instructors: id } });
+        }
+        else if (body.role == "trainer") {
+          Class.updateMany({ trainer: body._id }, { $pull: { instructors: id } });
+        }
+        else {
           return;
         }
         res.json({
@@ -1030,11 +1010,7 @@ router.patch(
               message: "Failed to update password!"
             });
           else {
-            User.findOneAndUpdate(
-              { _id: _id },
-              { password: hash },
-              { new: true, projection: { password: 0 } }
-            )
+            User.findOneAndUpdate({ _id: _id }, { password: hash }, { new: true, projection: { password: 0 } })
               .then(user => {
                 //console.log("{new}", user);
 
@@ -1071,9 +1047,9 @@ router.patch(
 
     //console.log("[user]", user);
     User.findOneAndUpdate({ _id: body._id }, user2, {
-      new: true,
-      projection: { password: 0, __v: 0 }
-    })
+        new: true,
+        projection: { password: 0, __v: 0 }
+      })
       .then(newUser => {
         //console.log("{new}", newUser);
         newUser = newUser.toObject();
@@ -1084,6 +1060,137 @@ router.patch(
         });
       })
       .catch(err => console.log(err));
+  }
+);
+
+/**
+*Endpoint for fetching instructors for assigning
+
+**/
+
+router.post(
+  "/fetch_instructors",
+  passport.authenticate("jwt", { session: false }),
+  async(req, res, next) => {
+    const { body } = req;
+    console.log("body", body);
+    try {
+      let trainer = await User.findOne({ _id: body.trainer })
+      console.log(trainer)
+      let ids = trainer.instructors.map(each => {
+        return mongoose.Types.ObjectId(each._id);
+      });
+      //Not in the class
+      console.log("ids", ids);
+      let instructors = await User.find({
+        $and: [{
+            _id: {
+              $nin: ids
+            }
+          },
+          { role: "instructor" },
+        ]
+      });
+
+      instructors = instructors.map((each, i) => {
+        return { ...each._doc, key: i };
+      });
+      console.log("students", instructors);
+      res.json({ success: true, instructors });
+    }
+    catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
+
+/**
+*
+* Endpoint for assigning instructor to a  trainer
+
+**/
+
+/**
+ *Endpoint for fetching parents *
+ **/
+router.post(
+  "/search_recipient",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    User.find({
+        $and: [
+
+          {
+            $or: [
+              { email: { $regex: body.query, $options: "i" } },
+              { fname: { $regex: body.query, $options: "i" } },
+
+              { lname: { $regex: body.query, $options: "i" } }
+            ]
+          }
+        ]
+      })
+      .then(result => {
+        return result.map(each => {
+          return Helpers.parseUser(each);
+        });
+        //console.log("[results]", result);
+      })
+      .then(result => {
+        res.status(200).json({ success: true, parents: result });
+      })
+      .catch(err => {
+        //console.log(err);
+      });
+  }
+);
+
+
+router.post(
+  "/add_instructors_to_class",
+  passport.authenticate("jwt", { session: false }),
+  async(req, res, next) => {
+    const { body } = req;
+    try {
+      let ids = body.instructors.map(each => {
+        return mongoose.Types.ObjectId(each._id);
+      });
+
+
+      let newTrainer = User.findOneAndUpdate({ _id: body.trainer }, { $push: { instructors: { $each: ids } } }, { new: true })
+      // ids = newClass.students.map(each => {
+      //   return mongoose.Types.ObjectId(each._id);
+      // });
+      let instructors = await User.find({
+        $and: [{
+            _id: {
+              $in: newTrainer.instructors
+            }
+          },
+          { role: "instructor" }
+        ]
+      });
+      instructors = instructors.map((each, i) => {
+        return { ...each._doc, key: i };
+      });
+      console.log("new class", newTrainer);
+      //  console.log("students", students);
+      res.json({
+        success: true,
+        instructors: instructors,
+        newTrainer: newTrainer._doc,
+        message: "Instructor(s) added successfully"
+      });
+    }
+    catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
   }
 );
 

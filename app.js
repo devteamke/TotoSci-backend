@@ -9,8 +9,7 @@ const mongoose = require("mongoose");
 mongoose.promise = global.Promise;
 mongoose.set("useCreateIndex", true);
 mongoose.connect(
-  "mongodb+srv://system:hello123@cluster0-flpph.mongodb.net/test?retryWrites=true",
-  { useNewUrlParser: true }
+  "mongodb+srv://system:hello123@cluster0-flpph.mongodb.net/test?retryWrites=true", { useNewUrlParser: true }
 );
 useMongoClient: true;
 //Neo4j
@@ -53,6 +52,8 @@ require("./models/Schools");
 require("./models/Class");
 require("./models/Attendance");
 require("./models/Feedback");
+require("./models/Conversations");
+require("./models/Messages");
 
 require("./passport")(passport);
 // Add routes
