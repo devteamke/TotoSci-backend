@@ -891,22 +891,62 @@ router.post(
     try {
       console.log('body', body)
       //check if recipient is valid
+      let conversation = null;
       if (body.type == "individual") {
         let recipient = await User.findOne({ _id: body.to });
+        conversation = await Conversation.findOne({ $and: [{ participants: { $all: [body.to, req.user._id] } }, { subject: body.subject }] })
+        //create new  conversation and use that to create new message
+        if (!conversation) {
+          conversation = await Conversation.create({ subject: body.subject, type: body.type, participants: [body.to, req.user._id], lastMessage: { content: body.message, sender: req.user._id, read: false }, addedBy: req.user._id }, { session: session })
+        }
+        else {
+          conversation.lastMessage = { content: body.message, sender: req.user._id, read: false }
 
+          await conversation.save();
+        }
+
+
+      }
+      else if (body.type == "broadcast") {
+        let recipients = await User.find({ role: body.to });
+        recipients = recipients.map(each => {
+          return mongoose.Types.ObjectId(each._id);
+        });
+
+        console.log(recipients)
+        recipients.push(req.user._id)
+        conversation = await Conversation.findOne({ $and: [{ participants: { $all: recipients } }, { subject: body.subject }] })
+        //create new  conversation and use that to create new message
+        if (!conversation) {
+          conversation = await Conversation.create({ subject: body.subject, type: body.type, participants: recipients, lastMessage: { content: body.message, sender: req.user._id, read: false }, addedBy: req.user._id }, { session: session })
+        }
+        else {
+          conversation.lastMessage = { content: body.message, sender: req.user._id, read: false }
+
+          await conversation.save();
+        }
       }
 
       //Check if conversation exists depending on type
 
-      let conversation = await Conversation.findOne({ participants: { $in: [body.to, req.user._id] } })
-      console.log('conversation', conversation)
-      if (!conversation) {
-        let newConversation = await Conversation.create({ subject: body.subject, type: body.type, participants: [body.to, req.user._id], addedBy: req.user._id }, { session: session })
-      }
-      throw new Error('haha')
-      //if existing use existing id to create message
-      //else create new  conversation and use that to create new message
 
+      console.log('conversation', conversation)
+      let newMessage;
+      if (Array.isArray(conversation)) {
+        newMessage = await Message.create({ sender: req.user._id, content: body.message, conversation: conversation[0]._id }, { session: session })
+      }
+      else {
+        newMessage = await Message.create({ sender: req.user._id, content: body.message, conversation: conversation._id }, { session: session })
+      }
+
+
+      console.log('new Message', newMessage)
+
+      //if existing use existing id to create message
+      await session.commitTransaction();
+      session.endSession();
+      req.io.sockets.emit('newMessage', newMessage)
+      res.json({ success: true, message: 'Your message was sent successfully', newMessage })
     }
     catch (err) {
       console.log(err.message)
@@ -915,6 +955,82 @@ router.post(
       if (err.message.includes("Cast to ObjectId failed for value")) {
         res.json({ success: false, message: 'Invalid recipient, ensure you have selected from autocomplete' })
       }
+      res.json({ success: false, message: err.message })
+    }
+  }
+);
+
+
+
+/**
+ *Endpoint for sending messages reply
+ **/
+router.post(
+  "/send_message_reply",
+  passport.authenticate("jwt", { session: false }),
+  async(req, res, next) => {
+    const { user } = req;
+    const { body } = req;
+    try {
+      console.log('body ', body);
+
+      //find and update converstation
+
+      let conversation = await Conversation.findOneAndUpdate({ _id: body.conversation }, { lastMessage: { content: body.message, sender: req.user._id, read: false } })
+
+      //Save new message
+      let newMessage = await Message.create({ sender: req.user._id, content: body.message, conversation: conversation._id }, )
+      req.io.sockets.emit('newMessage', newMessage)
+      res.json({ success: true, message: 'Your message was sent successfully', newMessage })
+    }
+    catch (err) {
+      console.log(err.message)
+
+
+
+      res.json({ success: false, message: err.message })
+    }
+  }
+);
+
+/**
+ *Endpoint for fetching notifications
+ **/
+router.post(
+  "/fetch_notifications",
+  passport.authenticate("jwt", { session: false }),
+  async(req, res, next) => {
+    const { user } = req;
+    const { body } = req;
+    try {
+      console.log('body ', body);
+      //find conversations of indiviatial which i am a participant,
+      //check if that converstation I was not the sender of the last unread message
+      //{ $ne: req.user._id }
+      let messages = await Conversation.find({
+        $and: [{
+            participants: { $in: req.user._id }
+          },
+          {
+            'lastMessage.sender': req.user._id
+          },
+          {
+            'lastMessage.read': false
+          }
+
+        ]
+      }).populate('participants', 'fname lname role')
+      let individual = [];
+      let broadcasts = [];
+
+      console.log(messages)
+      res.json({ success: true, message: 'notifications fetched', messages: messages })
+    }
+    catch (err) {
+      console.log(err.message)
+
+
+
       res.json({ success: false, message: err.message })
     }
   }

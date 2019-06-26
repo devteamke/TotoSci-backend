@@ -4,31 +4,34 @@ const mongoosePaginate = require("mongoose-aggregate-paginate-v2");
 const { Schema } = mongoose;
 
 const MessagesSchema = new Schema({
-  sender: {
-    type: Schema.ObjectId,
-    ref: "Users"
-  },
-  content: {
-    type: String
-  },
-  conversation: {
-    type: Schema.ObjectId,
-    ref: "Conversations"
-  },
+    sender: {
+        type: Schema.ObjectId,
+        ref: "Users"
+    },
+    content: {
+        type: String
+    },
+    conversation: {
+        type: Schema.ObjectId,
+        ref: "Conversations"
+    },
+    read: {
+        type: Boolean,
+        default: false
+    }
 
 }, { timestamps: true });
 
 MessagesSchema.methods.toJSON = function() {
-  return {
-    _id: this._id,
-    subject: this.subject,
-    participants: this.participants,
-
-    addedBy: this.addedBy,
-
-    createdAt: this.createdAt,
-    updatedAt: this.updatedAt
-  };
+    return {
+        _id: this._id,
+        sender: this.sender,
+        content: this.content,
+        conversation: this.content,
+        read: this.read,
+        createdAt: this.createdAt,
+        updatedAt: this.updatedAt
+    };
 };
 
 MessagesSchema.plugin(mongoosePaginate);

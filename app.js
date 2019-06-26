@@ -1,5 +1,7 @@
 const path = require("path");
 const express = require("express");
+const http = require('http')
+const socketIO = require('socket.io')
 const bodyParser = require("body-parser");
 const session = require("express-session");
 const cors = require("cors");
@@ -16,6 +18,15 @@ useMongoClient: true;
 
 const isProduction = process.env.NODE_ENV === "production";
 const app = express();
+
+// our server instance
+const server = http.createServer(app)
+
+// This creates our socket using the instance of the server
+const io = socketIO(server)
+
+
+
 const PORT = process.env.PORT || 8080;
 const IP = process.env.IP || process.env.OPENSHIFT_NODEJS_IP || "0.0.0.0";
 // set the view engine to ejs
@@ -56,6 +67,13 @@ require("./models/Conversations");
 require("./models/Messages");
 
 require("./passport")(passport);
+//io file
+const ioFile = require('./socket.io/socket.io')(io);
+// Make io accessible to our router
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+})
 // Add routes
 app.use(require("./routes"));
 
@@ -90,6 +108,7 @@ app.use((err, req, res) => {
   });
 });
 
-const server = app.listen(PORT, () =>
+
+server.listen(PORT, () =>
   console.log(`TotoSci is running, port :${PORT}`)
 );

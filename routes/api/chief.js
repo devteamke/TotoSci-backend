@@ -9,6 +9,7 @@ const Course = mongoose.model("Courses");
 const Parent = mongoose.model("Parents");
 const Class = mongoose.model("Class");
 const School = mongoose.model("Schools");
+const Conversation = mongoose.model("Conversations");
 const Middleware = require("../../Middleware/index");
 const Validator = require("validator");
 const Nodemailer = require("nodemailer");
@@ -1111,44 +1112,7 @@ router.post(
 
 **/
 
-/**
- *Endpoint for fetching parents *
- **/
-router.post(
-  "/search_recipient",
-  passport.authenticate("jwt", { session: false }),
-  Middleware.isChief,
-  (req, res, next) => {
-    const { body } = req;
-    const { user } = req;
 
-    User.find({
-        $and: [
-
-          {
-            $or: [
-              { email: { $regex: body.query, $options: "i" } },
-              { fname: { $regex: body.query, $options: "i" } },
-
-              { lname: { $regex: body.query, $options: "i" } }
-            ]
-          }
-        ]
-      })
-      .then(result => {
-        return result.map(each => {
-          return Helpers.parseUser(each);
-        });
-        //console.log("[results]", result);
-      })
-      .then(result => {
-        res.status(200).json({ success: true, parents: result });
-      })
-      .catch(err => {
-        //console.log(err);
-      });
-  }
-);
 
 
 router.post(
@@ -1190,6 +1154,121 @@ router.post(
     catch (err) {
       console.log(err);
       res.json({ success: false, message: err.message });
+    }
+  }
+);
+
+/**
+ *Endpoint for recipients*
+ **/
+router.post(
+  "/search_recipient",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    User.find({
+        $and: [
+
+          {
+            $or: [
+              { email: { $regex: body.query, $options: "i" } },
+              { fname: { $regex: body.query, $options: "i" } },
+
+              { lname: { $regex: body.query, $options: "i" } }
+            ]
+          }, {
+            _id: { $ne: req.user._id }
+          }
+        ]
+      })
+      .then(result => {
+        return result.map(each => {
+          return Helpers.parseUser(each);
+        });
+        //console.log("[results]", result);
+      })
+      .then(result => {
+        res.status(200).json({ success: true, parents: result });
+      })
+      .catch(err => {
+        //console.log(err);
+      });
+  }
+);
+/**
+ *Endpoint for fetching messages*
+ **/
+router.post(
+  "/fetch_messages",
+  passport.authenticate("jwt", { session: false }),
+  Middleware.isChief,
+  async(req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    try {
+      let conversations = await Conversation.aggregate([{
+        $match: {
+          participants: { $in: [req.user._id] }
+        },
+      }, {
+        $lookup: {
+          from: "messages",
+          let: { converId: "$_id" },
+          pipeline: [
+            { $addFields: { converId: { $toObjectId: "$converId" } } },
+            { $match: { $expr: { $eq: ["$conversation", "$$converId"] } } },
+            { $sort: { createdAt: 1 } },
+
+          ],
+
+          as: "messages"
+        }
+      }, {
+        $lookup: {
+          from: "users",
+          let: { participants: "$participants" },
+          pipeline: [
+            { $addFields: { participants: "$participants" } },
+            { $match: { $expr: { $in: ["$_id", "$$participants"] } } },
+            { $project: { fname: 1, lname: 1, role: 1 } }
+          ],
+
+          as: "participantsFull"
+        }
+      }, { $sort: { updatedAt: -1 } }])
+      //Get last message, split into types, get receiver if its to individual
+      let individual = [];
+      let broadcasts = [];
+      conversations = conversations.map((each) => {
+
+        if (each.type == "individual") {
+
+          if (each.participantsFull[0]._id.toString() == req.user._id.toString()) {
+            each.recipient = Helpers.capitalize(each.participantsFull[1].fname) + ' ' + Helpers.capitalize(each.participantsFull[1].lname) + ' -(' + Helpers.capitalize(each.participantsFull[1].role) + ')'
+
+          }
+          else {
+            each.recipient = Helpers.capitalize(each.participantsFull[0].fname) + ' ' + Helpers.capitalize(each.participantsFull[0].lname) + ' -(' + Helpers.capitalize(each.participantsFull[0].role) + ')'
+          }
+          individual.push(each)
+        }
+        else {
+          each.recipient = Helpers.capitalize(each.participantsFull[1].role) + 's'
+          broadcasts.push(each)
+        }
+
+
+        return each;
+      })
+      res.json({ success: true, conversations, individual, broadcasts })
+    }
+    catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message })
     }
   }
 );

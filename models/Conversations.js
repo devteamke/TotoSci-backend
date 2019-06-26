@@ -11,6 +11,7 @@ const ConversationsSchema = new Schema({
     type: String,
     enum: ["individual", "broadcast"]
   },
+  lastMessage: Object,
   participants: [{
     type: Schema.ObjectId,
     ref: "Users"
@@ -19,6 +20,11 @@ const ConversationsSchema = new Schema({
     type: Schema.ObjectId,
     ref: "Users"
   },
+  opened: {
+    type: Boolean,
+    default: false
+  }
+
 
 }, { timestamps: true });
 
@@ -29,7 +35,7 @@ ConversationsSchema.methods.toJSON = function() {
     participants: this.participants,
     type: this.type,
     addedBy: this.addedBy,
-
+    lastMessage: this.lastMessage,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
   };

@@ -101,37 +101,142 @@ router.post(
 				parent: user._id
 			};
 		}
+		console.log(ft)
+		try {
+			let myStudents = await Student.aggregate([{
+					$match: ft,
+				},
+				{ //console.log(studentId)
+					$lookup: {
+						from: "classes",
+						let: { studentId: "$_id" },
+						pipeline: [
+							{ $addFields: { studentId: { $toObjectId: "$studentId" } } },
+							{ $match: { $expr: { $in: ["$$studentId", "$students"] } } },
+							{ $project: { name: 1, duration: 1, start_time: 1, trainer: 1, day: 1, course: 1, } }
+						],
 
-		// 	//console.log('[filter]', ft);
-		// //console.log('[type]', st);
+						as: "class"
+					}
+				},
 
-		// return
-		let aggregate = Student.aggregate()
-			.match(ft)
+				{
+					$lookup: {
+						from: "schools",
+						let: { schoolId: "$school" },
+						pipeline: [
+							{ $addFields: { schoolId: { $toObjectId: "$schoolId" } } },
+							{ $match: { $expr: { $eq: ["$_id", "$$schoolId"] } } },
+							{ $project: { name: 1, county: 1, sub_county: 1 } }
+						],
 
-			.lookup({
-				from: "schools",
-				let: { schoolId: "$school" },
-				pipeline: [
-					{ $addFields: { schoolId: { $toObjectId: "$schoolId" } } },
-					{ $match: { $expr: { $eq: ["$_id", "$$schoolId"] } } },
-					{ $project: { name: 1, county: 1, sub_county: 1 } }
-				],
+						as: "school"
+					}
+				},
+				{
+					$lookup: {
+						from: "users",
+						let: { userId: "$addedBy" },
+						pipeline: [
+							{ $addFields: { userId: { $toObjectId: "$userId" } } },
+							{ $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+							{ $project: { fname: 1, lname: 1, email: 1, role: 1 } }
+						],
 
-				as: "school"
+						as: "addedBy"
+					}
+				}
+			])
+			console.log(myStudents);
+			let mStudents = myStudents.map((each, i) => {
+				return { ...each, key: i };
 			});
 
-		Student.aggregatePaginate(aggregate, {
-				page: body.page,
-				limit: body.limit
+			console.log(mStudents.school)
+			console.log(mStudents.class)
+			res.status(200).json({ success: true, result: mStudents });
+
+
+		}
+		catch (err) {
+			console.log(err)
+		}
+
+
+
+	}
+);
+
+/**
+ * Endpoint for fetching courses registered to a given student
+ **/
+
+router.post(
+	"/fetch_course",
+	passport.authenticate("jwt", { session: false }),
+	Middleware.isParent,
+	async(req, res, next) => {
+		const { body } = req;
+		const { user } = req;
+		let coursesId = [];
+		//console.log('Course Id received', body);
+		body.coursesId.map((each) => {
+			let mapId = mongoose.Types.ObjectId(each);
+			coursesId.push(mapId)
+		});
+
+		Course.find({ '_id': { $in: coursesId } })
+			.then((result) => {
+				//console.log(result)
+				result = result.map((each) => {
+					delete each.__v;
+					each.__v = undefined
+
+					return each.toObject();
+				})
+				//console.log('Removed _v', result)
+				res.json({
+					success: true,
+					result: result
+				});
 			})
-			.then(result => {
-				console.log("[results]", result);
-				res.status(200).json({ success: true, result: result });
+			.catch(err => console.log(err));
+	}
+);
+/**
+ * Endpoint for fetching courses registered to a given student
+ **/
+
+router.post(
+	"/fetch_trainer",
+	passport.authenticate("jwt", { session: false }),
+	Middleware.isParent,
+	async(req, res, next) => {
+		const { body } = req;
+		const { user } = req;
+		let trainerId = [];
+		console.log('Course Id received', body);
+		body.trainersId.map((each) => {
+			let mapId = mongoose.Types.ObjectId(each);
+			trainerId.push(mapId)
+		});
+
+		User.find({ '_id': { $in: trainerId } })
+			.then((result) => {
+				//console.log(result)
+				result = result.map((each) => {
+					delete each.__v;
+					each.__v = undefined
+
+					return each.toObject();
+				})
+				console.log('Removed _v', result)
+				res.json({
+					success: true,
+					result: result
+				});
 			})
-			.catch(err => {
-				//console.log(err);
-			});
+			.catch(err => console.log(err));
 	}
 );
 /**

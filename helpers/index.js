@@ -8,7 +8,8 @@ Helpers.parseUser = user => {
     delete user.trainers;
     delete user.instructors;
     delete user.courses;
-  } else if (user.role == "manager") {
+  }
+  else if (user.role == "manager") {
     delete user.students;
     delete user.trainers;
     delete user.instructors;
@@ -19,7 +20,15 @@ Helpers.parseUser = user => {
   return user;
 };
 Helpers.capitalize = st => {
-  return st.charAt(0).toUpperCase() + st.slice(1);
+  if (st) {
+    st.charAt(0).toUpperCase() + st.slice(1);
+  }
+  else {
+    st = "NA"
+  }
+
+
+  return st
 };
 
 Helpers.kebab = string => {
