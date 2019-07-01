@@ -3,30 +3,33 @@ const mongoosePaginate = require("mongoose-aggregate-paginate-v2");
 
 const { Schema } = mongoose;
 
-const ConversationsSchema = new Schema({
-  subject: {
-    type: String
+const ConversationsSchema = new Schema(
+  {
+    subject: {
+      type: String
+    },
+    type: {
+      type: String,
+      enum: ["individual", "broadcast"]
+    },
+    lastMessage: Object,
+    participants: [
+      {
+        type: Schema.ObjectId,
+        ref: "Users"
+      }
+    ],
+    addedBy: {
+      type: Schema.ObjectId,
+      ref: "Users"
+    },
+    opened: {
+      type: Boolean,
+      default: false
+    }
   },
-  type: {
-    type: String,
-    enum: ["individual", "broadcast"]
-  },
-  lastMessage: Object,
-  participants: [{
-    type: Schema.ObjectId,
-    ref: "Users"
-  }],
-  addedBy: {
-    type: Schema.ObjectId,
-    ref: "Users"
-  },
-  opened: {
-    type: Boolean,
-    default: false
-  }
-
-
-}, { timestamps: true });
+  { timestamps: true }
+);
 
 ConversationsSchema.methods.toJSON = function() {
   return {

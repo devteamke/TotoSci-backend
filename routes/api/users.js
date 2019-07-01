@@ -640,16 +640,16 @@ router.post(
       if (studentsRegistrationsF.length > 0) {
         await getMonthDataF;
       }
-      //   await getMonthDataM;
-      //   await getMonthDataF;
-      console.log('students no', students);
-      console.log('trainers', trainers);
-      console.log('instructors', instructors);
-      console.log('courses', courses);
+      await getMonthDataM;
+      await getMonthDataF;
+      // console.log("students no", students);
+      // console.log("trainers", trainers);
+      // console.log("instructors", instructors);
+      // console.log("courses", courses);
 
-      console.log('student registrations', studentsRegistrations);
-      console.log('student registrationsM', studentsRegistrationsM);
-      console.log('student registrationsF', studentsRegistrationsF);
+      // console.log("student registrations", studentsRegistrations);
+      // console.log("student registrationsM", studentsRegistrationsM);
+      // console.log("student registrationsF", studentsRegistrationsF);
       res.json({
         success: true,
         students,
@@ -912,6 +912,9 @@ router.post(
             },
             { session: session }
           );
+          // console.log('new Conversation', conversation);
+          // console.log('new Conversation', req.io);
+          //req.io.join(conversation[0]._id);
         } else {
           conversation.lastMessage = {
             content: body.message,
@@ -986,12 +989,45 @@ router.post(
         );
       }
 
-      console.log('new Message', newMessage);
+      //console.log('new Message', newMessage);
 
       //if existing use existing id to create message
       await session.commitTransaction();
       session.endSession();
-      req.io.sockets.emit('newMessage', newMessage);
+      let room;
+      if (Array.isArray(conversation)) {
+        room = conversation[0]._id;
+      } else {
+        room = conversation._id;
+      }
+      console.log('room', room);
+      // if (body.type == 'individual') {
+      //   console.log('sending To', body.to);
+      //   req.io.sockets.to(body.to).emit('newMessage', newMessage);
+      // }
+
+      //update notifications for recipient
+      let conversations = await Conversation.find({
+        $and: [
+          {
+            participants: { $in: body.to }
+          },
+          {
+            'lastMessage.sender': { $ne: body.to }
+          },
+          {
+            'lastMessage.read': false
+          }
+        ]
+      })
+        .populate('participants', 'fname lname role')
+        .sort({ updatedAt: -1 })
+        .limit(10);
+
+      //Emit to recipient
+      if (body.type == 'individual') {
+        req.io.sockets.to(body.to).emit('updateNotifications', conversations);
+      }
       res.json({
         success: true,
         message: 'Your message was sent successfully',
@@ -1013,7 +1049,7 @@ router.post(
   }
 );
 /**
- *Endpoint for fetching conversation messages
+ *Endpoint for fetching conversation messages and update notifications
  **/
 router.post(
   '/fetch_conversation_messages',
@@ -1028,6 +1064,35 @@ router.post(
       let messages = await Message.find({
         conversation: body.conversation
       });
+      //Update read
+      let conversation = await Conversation.findOneAndUpdate(
+        { _id: body.conversation },
+        { 'lastMessage.read': true }
+      );
+      console.log('conversation', conversation);
+      //find and emit unopened converstations
+      let conversations = await Conversation.find({
+        $and: [
+          {
+            participants: { $in: req.user._id }
+          },
+          {
+            'lastMessage.sender': { $ne: req.user._id }
+          },
+          {
+            'lastMessage.read': false
+          }
+        ]
+      })
+        .populate('participants', 'fname lname role')
+        .sort({ createAt: -1 })
+        .limit(10);
+      req.io.sockets
+        .to(req.user._id)
+        .emit('updateNotifications', conversations);
+
+      //Update messages to read
+      let updateMessages = await Message.update({conversation:body.conversation, sender:{$ne:req.user._id}},{read:true},{multi:true})
       //console.log('fetched Messages', messages);
       //req.io.sockets.emit('newMessage', newMessage);
       res.json({
@@ -1058,7 +1123,7 @@ router.post(
       //find and update converstation
 
       let conversation = await Conversation.findOneAndUpdate(
-        { _id: body.conversation },
+        { _id: body.conversation._id },
         {
           lastMessage: {
             content: body.message,
@@ -1074,7 +1139,41 @@ router.post(
         content: body.message,
         conversation: conversation._id
       });
-      req.io.sockets.emit('newMessage', newMessage);
+      req.io.sockets.to(conversation._id).emit('newMessage', newMessage);
+      //update notifications for recipient
+      let recipient;
+      if (body.conversation.participants[0]._id == req.user._id) {
+        recipient = body.conversation.participants[1]._id;
+      } else {
+        recipient = body.conversation.participants[0]._id;
+      }
+      let conversations = await Conversation.find({
+        $and: [
+          {
+            participants: { $in: recipient }
+          },
+          {
+            'lastMessage.sender': { $ne: recipient }
+          },
+          {
+            'lastMessage.read': false
+          }
+        ]
+      })
+        .populate('participants', 'fname lname role')
+        .sort({ updatedAt: -1 })
+        .limit(10);
+
+      //Emit to recipient
+      if (body.conversation.type == 'individual') {
+        console.log(
+          'recipient',
+          recipient,
+          'conversations',
+          conversations.length
+        );
+        req.io.sockets.to(recipient).emit('updateNotifications', conversations);
+      }
       res.json({
         success: true,
         message: 'Your message was sent successfully',
@@ -1098,28 +1197,35 @@ router.post(
     const { user } = req;
     const { body } = req;
     try {
-      console.log('body ', body);
+      //console.log("body  notifitications", body);
       //find conversations of indiviatial which i am a participant,
       //check if that converstation I was not the sender of the last unread message
       //{ $ne: req.user._id }
-      let conversations = await Conversation.find({
+      let messages = await Conversation.find({
         $and: [
           {
             participants: { $in: req.user._id }
           },
           {
-            'lastMessage.sender': req.user._id
+            'lastMessage.sender': { $ne: req.user._id }
           },
           {
             'lastMessage.read': false
           }
         ]
-      }).populate('participants', 'fname lname role');
+      })
+        .populate('participants', 'fname lname role')
+        .sort({ updatedAt: -1 })
+        .limit(10);
       let individual = [];
       let broadcasts = [];
 
-      console.log(conversations);
-      //res.json({ success: true, message: 'notifications fetched', messages: messages })
+      //console.log(conversations);
+      res.json({
+        success: true,
+        message: 'notifications fetched',
+        messages: messages
+      });
     } catch (err) {
       console.log(err.message);
 

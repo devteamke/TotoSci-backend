@@ -40,7 +40,8 @@ exports = module.exports = io => {
 
   io.on('connection', socket => {
     const { user } = socket;
-    socket.emit('newMessage', { haha: 'just trying' });
+    //     socket.emit('newMessage', { haha: 'just trying' });
+    socket.join(user._id);
     socket.conversations.map(each => {
       socket.join(each._id);
       //  console.log(each._id)
