@@ -232,8 +232,10 @@ router.post(
           as: "attendance"
         });
       classes = classes.map((each, i) => {
-        console.log(each.attendance);
-       
+        each.attendance.map((atn, j) => {
+          each.attendance[j] = { ...atn, ident: i };
+        });
+        //console.log(each.attendance);
         return { ...each, key: i };
       });
       //console.log(classes);
