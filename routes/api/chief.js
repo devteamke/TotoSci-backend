@@ -1134,9 +1134,10 @@ router.post(
 **/
 
 router.post(
-  '/add_instructors_to_class',
+  '/assign_instructor_to_trainer',
   passport.authenticate('jwt', { session: false }),
   async (req, res, next) => {
+    return;
     const { body } = req;
     try {
       let ids = body.instructors.map(each => {
@@ -1256,6 +1257,7 @@ router.post(
       let individual = [];
       let broadcasts = [];
       conversations = conversations.map(each => {
+        console.log('participants', each.participantsFull[1]);
         if (each.type == 'individual') {
           if (
             each.participantsFull[0]._id.toString() == req.user._id.toString()
@@ -1288,7 +1290,11 @@ router.post(
       let plusUnread = await Promise.all(
         conversations.map(each => {
           return new Promise((resolve, reject) => {
-            Message.find({ conversation: each._id, read: false, sender:{$ne:req.user._id} })
+            Message.find({
+              conversation: each._id,
+              read: false,
+              sender: { $ne: req.user._id }
+            })
               .count()
               .then(count => {
                 console.log(count);

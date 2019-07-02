@@ -1,22 +1,24 @@
-const mongoose = require("mongoose");
-const router = require("express").Router();
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
-const passport = require("passport");
-const User = mongoose.model("Users");
-const Student = mongoose.model("Students");
-const Course = mongoose.model("Courses");
-const Class = mongoose.model("Class");
-const Attendance = mongoose.model("Attendance");
-const Feedback = mongoose.model("Feedback");
-const Middleware = require("../../Middleware/index");
-const Validator = require("validator");
-const Nodemailer = require("nodemailer");
-const Lowercase = require("lower-case");
-const xoauth2 = require("xoauth2");
-const generator = require("generate-password");
-const assert = require("assert");
-const Helpers = require("../../helpers/index");
+const mongoose = require('mongoose');
+const router = require('express').Router();
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const passport = require('passport');
+const User = mongoose.model('Users');
+const Student = mongoose.model('Students');
+const Course = mongoose.model('Courses');
+const Class = mongoose.model('Class');
+const Attendance = mongoose.model('Attendance');
+const Feedback = mongoose.model('Feedback');
+const Conversation = mongoose.model('Conversations');
+const Message = mongoose.model('Messages');
+const Middleware = require('../../Middleware/index');
+const Validator = require('validator');
+const Nodemailer = require('nodemailer');
+const Lowercase = require('lower-case');
+const xoauth2 = require('xoauth2');
+const generator = require('generate-password');
+const assert = require('assert');
+const Helpers = require('../../helpers/index');
 //
 const ObjectId = mongoose.Types.ObjectId;
 
@@ -24,8 +26,10 @@ const ObjectId = mongoose.Types.ObjectId;
  *Endpoint fo getting a paginated list of all class
  **/
 router.post(
-  "/all_classes",
-  passport.authenticate("jwt", { session: false }),
+  '/all_classes',
+
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isInstructor,
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
@@ -36,10 +40,10 @@ router.post(
       body.query = Helpers.kebab(body.query);
       ft = {
         $or: [
-          { name: { $regex: body.query, $options: "i" } },
-          { course: { $regex: body.query, $options: "i" } },
+          { name: { $regex: body.query, $options: 'i' } },
+          { course: { $regex: body.query, $options: 'i' } },
 
-          { day: { $regex: body.query, $options: "i" } }
+          { day: { $regex: body.query, $options: 'i' } }
         ]
       };
     }
@@ -57,30 +61,30 @@ router.post(
       })
 
       .lookup({
-        from: "users",
-        let: { userId: "$trainer" },
+        from: 'users',
+        let: { userId: '$trainer' },
         pipeline: [
-          { $addFields: { userId: { $toObjectId: "$userId" } } },
-          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+          { $addFields: { userId: { $toObjectId: '$userId' } } },
+          { $match: { $expr: { $eq: ['$_id', '$$userId'] } } },
           { $project: { fname: 1, lname: 1 } }
         ],
 
-        as: "addedBy"
+        as: 'addedBy'
       })
       .project({
         password: 0,
         isSetUp: 0
       })
       .lookup({
-        from: "courses",
-        let: { courseId: "$course" },
+        from: 'courses',
+        let: { courseId: '$course' },
         pipeline: [
-          { $addFields: { courseId: { $toObjectId: "$courseId" } } },
-          { $match: { $expr: { $eq: ["$_id", "$$courseId"] } } },
+          { $addFields: { courseId: { $toObjectId: '$courseId' } } },
+          { $match: { $expr: { $eq: ['$_id', '$$courseId'] } } },
           { $project: { name: 1 } }
         ],
 
-        as: "courseName"
+        as: 'courseName'
       });
 
     Class.aggregatePaginate(aggregate, {
@@ -88,7 +92,7 @@ router.post(
       limit: body.limit
     })
       .then(result => {
-        console.log("[results]", result);
+        console.log('[results]', result);
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {
@@ -103,11 +107,12 @@ router.post(
 **/
 
 router.post(
-  "/fetch_courses",
-  passport.authenticate("jwt", { session: false }),
+  '/fetch_courses',
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isInstructor,
   (req, res, next) => {
     Course.find().then(courses => {
-      console.log("courses", courses);
+      console.log('courses', courses);
 
       return res.json({
         success: true,
@@ -122,17 +127,19 @@ router.post(
 **/
 
 router.post(
-  "/fetch_students",
-  passport.authenticate("jwt", { session: false }),
+  '/fetch_students',
+
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isInstructor,
   async (req, res, next) => {
     const { body } = req;
-    console.log("body", body);
+    console.log('body', body);
     try {
       let ids = body._class.students.map(each => {
         return mongoose.Types.ObjectId(each);
       });
       //Not in the class
-      console.log("ids", ids);
+      console.log('ids', ids);
       let students;
 
       if (!body.inClass) {
@@ -151,7 +158,7 @@ router.post(
       students = students.map((each, i) => {
         return { ...each._doc, key: i };
       });
-      console.log("students", students);
+      console.log('students', students);
       res.json({ success: true, students });
     } catch (err) {
       console.log(err);
@@ -166,17 +173,19 @@ router.post(
 **/
 
 router.post(
-  "/fetch_class_instructors",
-  passport.authenticate("jwt", { session: false }),
+  '/fetch_class_instructors',
+
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isInstructor,
   async (req, res, next) => {
     const { body } = req;
-    console.log("body", body);
+    console.log('body', body);
     try {
       let ids = body._class.instructors.map(each => {
         return mongoose.Types.ObjectId(each);
       });
       //in the class
-      console.log("ids", ids);
+      console.log('ids', ids);
       let instructors = await User.find({
         $and: [
           {
@@ -184,7 +193,7 @@ router.post(
               $in: ids
             }
           },
-          { role: "instructor" }
+          { role: 'instructor' }
         ]
       });
 
@@ -206,8 +215,10 @@ router.post(
 **/
 
 router.post(
-  "/fetch_attendance",
-  passport.authenticate("jwt", { session: false }),
+  '/fetch_attendance',
+
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isInstructor,
   async (req, res, next) => {
     const { body } = req;
     try {
@@ -223,7 +234,7 @@ router.post(
         }
       });
       //console.log("[ lessons ]", lessons);
-      console.log("[ students ]", students.length);
+      console.log('[ students ]', students.length);
       let attendance = [];
       students.map((student, i) => {
         let data = {
@@ -231,7 +242,7 @@ router.post(
           _id: student._id,
           name:
             Helpers.capitalize(student.fname) +
-            " " +
+            ' ' +
             Helpers.capitalize(student.lname)
         };
         let l = {};
@@ -239,7 +250,7 @@ router.post(
           //console.log(lesson.present.indexOf(student._id) > 0);
           if (lesson.present.indexOf(student._id) > -1) {
             //attended
-            l[i + 1] = "<b>true</b>";
+            l[i + 1] = '<b>true</b>';
           } else {
             //missed
             l[i + 1] = false;
@@ -248,29 +259,29 @@ router.post(
         data = { ...data, ...l };
         attendance.push(data);
       });
-      console.log("[ attendance ]", attendance);
+      console.log('[ attendance ]', attendance);
       let columnsA = [];
       if (attendance.length > 0) {
         let keys = Object.keys(attendance[0]);
 
         keys.map(key => {
           let e = {};
-          if (key == "key") {
+          if (key == 'key') {
             return;
           }
-          if (key == "_id") {
+          if (key == '_id') {
             return;
           }
-          if (key == "name") {
+          if (key == 'name') {
             return;
             columnsA.unshift({
-              title: "Name",
+              title: 'Name',
               dataIndex: key
             });
             return;
           }
           columnsA.push({
-            title: "Lesson " + key,
+            title: 'Lesson ' + key,
             dataIndex: key
           });
         });
@@ -281,7 +292,7 @@ router.post(
         success: true,
         attendance,
         columnsA,
-        message: "Attendance  fetched successfully"
+        message: 'Attendance  fetched successfully'
       });
     } catch (err) {
       console.log(err);
@@ -295,8 +306,9 @@ router.post(
 **/
 
 router.post(
-  "/fetch_feed_attendance",
-  passport.authenticate("jwt", { session: false }),
+  '/fetch_feed_attendance',
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isInstructor,
   async (req, res, next) => {
     const { body } = req;
     let student = body.student;
@@ -311,7 +323,7 @@ router.post(
         _id: student._id,
         name:
           Helpers.capitalize(student.fname) +
-          " " +
+          ' ' +
           Helpers.capitalize(student.lname)
       };
       let l = {};
@@ -321,10 +333,10 @@ router.post(
 
         if (lesson.present.indexOf(student._id) > -1) {
           //attended
-          l[i + 1] = i + 1 + "true";
+          l[i + 1] = i + 1 + 'true';
         } else {
           //missed
-          l[i + 1] = i + 1 + "false";
+          l[i + 1] = i + 1 + 'false';
         }
         larr.push(l[i + 1]);
       });
@@ -333,17 +345,17 @@ router.post(
         student: student._id,
         _class: body._class._id
       })
-        .populate({ path: "addedBy", select: "fname lname" })
+        .populate({ path: 'addedBy', select: 'fname lname' })
         .sort({
           createdAt: -1
         });
 
-      console.log("feedback", feedback);
+      console.log('feedback', feedback);
       res.json({
         success: true,
         attendance: larr,
         feedback: feedback,
-        message: "Attendance  fetched successfully"
+        message: 'Attendance  fetched successfully'
       });
     } catch (err) {
       console.log(err);
@@ -357,8 +369,9 @@ router.post(
 **/
 
 router.post(
-  "/save_feedback",
-  passport.authenticate("jwt", { session: false }),
+  '/save_feedback',
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isInstructor,
   async (req, res, next) => {
     const { body } = req;
 
@@ -372,12 +385,137 @@ router.post(
       };
 
       let savedFeed = await Feedback.create(feedback);
-      console.log("saved feedback", savedFeed);
+      console.log('saved feedback', savedFeed);
       res.json({
         success: true,
 
         savedFeed,
-        message: "Feedback saved successfully"
+        message: 'Feedback saved successfully'
+      });
+    } catch (err) {
+      console.log(err);
+      res.json({ success: false, message: err.message });
+    }
+  }
+);
+
+/**
+ *Endpoint for recipients*
+ **/
+router.post(
+  '/fetch_recipients',
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isInstructor,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+    console.log('currentInstructor', user._id);
+    User.find({
+      $or: [{ instructors: { $in: [req.user._id] } }]
+    })
+      .then(result => {
+        console.log('[results]', result);
+        return result.map(each => {
+          return Helpers.parseUser(each);
+        });
+      })
+      .then(result => {
+        res.status(200).json({ success: true, result });
+      })
+      .catch(err => {
+        //console.log(err);
+      });
+  }
+);
+
+/**
+ *Endpoint for fetching  conversations*
+ **/
+router.post(
+  '/fetch_messages',
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isInstructor,
+  async (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    try {
+      let conversations = await Conversation.aggregate([
+        {
+          $match: {
+            participants: { $in: [req.user._id] }
+          }
+        },
+        {
+          $lookup: {
+            from: 'users',
+            let: { participants: '$participants' },
+            pipeline: [
+              { $addFields: { participants: '$participants' } },
+              { $match: { $expr: { $in: ['$_id', '$$participants'] } } },
+              { $project: { fname: 1, lname: 1, role: 1 } }
+            ],
+
+            as: 'participantsFull'
+          }
+        },
+        { $sort: { createdAt: -1 } }
+      ]);
+      //Get last message, split into types, get receiver if its to individual
+      let individual = [];
+      let broadcasts = [];
+      conversations = conversations.map(each => {
+        if (each.type == 'individual') {
+          if (
+            each.participantsFull[0]._id.toString() == req.user._id.toString()
+          ) {
+            each.recipient =
+              Helpers.capitalize(each.participantsFull[1].fname) +
+              ' ' +
+              Helpers.capitalize(each.participantsFull[1].lname) +
+              ' -(' +
+              Helpers.capitalize(each.participantsFull[1].role) +
+              ')';
+          } else {
+            each.recipient =
+              Helpers.capitalize(each.participantsFull[0].fname) +
+              ' ' +
+              Helpers.capitalize(each.participantsFull[0].lname) +
+              ' -(' +
+              Helpers.capitalize(each.participantsFull[0].role) +
+              ')';
+          }
+          individual.push(each);
+        } else {
+          each.recipient = Helpers.capitalize(each.participantsFull[0].role);
+          broadcasts.push(each);
+        }
+
+        return each;
+      });
+      let plusUnread = await Promise.all(
+        conversations.map(each => {
+          return new Promise((resolve, reject) => {
+            Message.find({
+              conversation: each._id,
+              read: false,
+              sender: { $ne: req.user._id }
+            })
+              .count()
+              .then(count => {
+                console.log(count);
+                each.unread = count;
+                resolve(each);
+              });
+          });
+        })
+      );
+      // console.log('plusUnread', plusUnread);
+      res.json({
+        success: true,
+        conversations: plusUnread,
+        individual,
+        broadcasts
       });
     } catch (err) {
       console.log(err);

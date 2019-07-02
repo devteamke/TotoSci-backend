@@ -42,20 +42,22 @@ exports = module.exports = io => {
     const { user } = socket;
     //     socket.emit('newMessage', { haha: 'just trying' });
     socket.join(user._id);
+    //Joining my user group room
+    socket.join(user.role);
     socket.conversations.map(each => {
       socket.join(each._id);
       //  console.log(each._id)
     });
     //console.log(io.sockets.adapter.rooms)
-    //   if (socket.request.user.role == 'admin') {
-    //         socket.join('adminRoom');
+    // if (socket.request.user.role == 'admin') {
+    //       socket.join('adminRoom');
 
-    //     }
-    //     else {
-    //         socket.join('masterRoom');
-    //         // var clients =io.sockets.adapter.rooms['masterRoom'].sockets
-    //         //  console.log(clients)
-    //     }
+    //   }
+    //   else {
+    //       socket.join('masterRoom');
+    //       // var clients =io.sockets.adapter.rooms['masterRoom'].sockets
+    //       //  console.log(clients)
+    //   }
 
     // console.log('New client connected');
     //console.log(socket.request.user.logged_in);
