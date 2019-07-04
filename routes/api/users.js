@@ -15,6 +15,8 @@ const Nodemailer = require('nodemailer');
 const xoauth2 = require('xoauth2');
 const generator = require('generate-password');
 const Helpers = require('../../helpers/index');
+//form upload
+const formidable = require('formidable');
 
 /**
  *Endpoint for loging in, requires checking if user is active ...*
@@ -1270,7 +1272,34 @@ router.post(
     }
   }
 );
-
+/**
+ *Endpoint for uploading attachments
+ **/
+router.post(
+  '/upload',
+  passport.authenticate('jwt', { session: false }),
+  async (req, res, next) => {
+    new formidable.IncomingForm().parse(req, (err, fields, files) => {
+      if (err) {
+        console.error('Error', err);
+        throw err;
+      }
+      console.log('Fields', fields);
+      console.log('Files', files.file);
+      //   files.map(file => {
+      //     console.log(file)
+      //   })
+      res.json({
+        name: files.file.name,
+        status: 'done',
+        url:
+          'https://zos.alipayobjects.com/rmsportal/jkjgkEfvpUPVyRjUImniVslZfWPnJuuZ.png',
+        thumbUrl:
+          'https://zos.alipayobjects.com/rmsportal/jkjgkEfvpUPVyRjUImniVslZfWPnJuuZ.png'
+      });
+    });
+  }
+);
 const parseUser = user => {
   if (user.role == 'admin') {
     delete user.students;
