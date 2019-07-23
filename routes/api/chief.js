@@ -848,10 +848,39 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
+    const { sorter } = body;
+    const { filters } = body;
     let st = [{ role: 'trainer' }, { role: 'instructor' }];
 
     let ft = {};
 
+    let sort = { createdAt: -1 };
+    //Sorting
+    if (sorter) {
+      sort = { [sorter.field]: sorter.order == 'ascend' ? 1 : -1 };
+    }
+    //filtering
+    let filter = {};
+    if (filters) {
+      let filterKeys = Object.keys(filters);
+      filterKeys = filterKeys.map(key => {
+        let incArray = filters[key];
+        incArray = incArray.map(each => {
+          if (each.length == '5d028b8808bfd305857b78d5'.length) {
+            return mongoose.Types.ObjectId(each);
+          } else {
+            return each;
+          }
+        });
+        let obj = { $in: incArray };
+
+        if (incArray.length > 0) {
+          filter[key] = obj;
+        }
+
+        // console.log('[obj]', returnObj);
+      });
+    }
     if (body.query) {
       ft = {
         $or: [
@@ -873,9 +902,10 @@ router.post(
 
           {
             _id: { $ne: user._id }
-          }
+          }, filter
         ]
       })
+      .sort(sort)
       .lookup({
         from: 'users',
         let: { userId: '$addedBy' },
@@ -896,6 +926,7 @@ router.post(
       page: body.page,
       limit: body.limit
     })
+   
       .then(result => {
         // console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
@@ -933,14 +964,13 @@ router.post(
       let filterKeys = Object.keys(filters);
       filterKeys = filterKeys.map(key => {
         let incArray = filters[key];
-     incArray =   incArray.map((each)=>{
-       if(each.length ==  '5d028b8808bfd305857b78d5'.length){
-        return mongoose.Types.ObjectId(each)
-       }else {
-         return each
-       }
-      
-        })
+        incArray = incArray.map(each => {
+          if (each.length == '5d028b8808bfd305857b78d5'.length) {
+            return mongoose.Types.ObjectId(each);
+          } else {
+            return each;
+          }
+        });
         let obj = { $in: incArray };
 
         if (incArray.length > 0) {
@@ -950,7 +980,7 @@ router.post(
         // console.log('[obj]', returnObj);
       });
     }
-    console.log('[ filter obj]', filter);
+  // console.log('[ filter obj]', filter);
     //Searching
     if (body.query) {
       ft = {
@@ -1012,7 +1042,17 @@ router.post(
       limit: body.limit
     })
       .then(result => {
-    
+        let docs = [...result.docs];
+        //console.log('[docs]', docs);
+        if (body.withoutParents) {
+          docs2 = [];
+          docs.map(each => {
+            if (each.parent.length == 0) {
+              docs2.push(each);
+            }
+          });
+          result.docs = docs2;
+        }
         //console.log("[results]", result);
         res.status(200).json({ success: true, students: result });
       })
@@ -1033,7 +1073,7 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
-  
+
     let ft = {};
 
     if (body.query) {
@@ -1075,6 +1115,7 @@ router.post(
     })
       .then(result => {
         //console.log("[results]", result);
+
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {
@@ -1554,7 +1595,7 @@ router.post(
       instructors = instructors.map((each, i) => {
         return { ...each._doc, key: i };
       });
-      console.log('students', instructors);
+      //console.log('', instructors);
       res.json({ success: true, instructors });
     } catch (err) {
       console.log(err);
@@ -1573,14 +1614,15 @@ router.post(
   '/assign_instructor_to_trainer',
   passport.authenticate('jwt', { session: false }),
   async (req, res, next) => {
-    return;
     const { body } = req;
+   
+   
     try {
       let ids = body.instructors.map(each => {
         return mongoose.Types.ObjectId(each._id);
       });
 
-      let newTrainer = User.findOneAndUpdate(
+      let newTrainer =  await User.findOneAndUpdate(
         { _id: body.trainer },
         { $push: { instructors: { $each: ids } } },
         { new: true }
@@ -1598,16 +1640,16 @@ router.post(
           { role: 'instructor' }
         ]
       });
-      instructors = instructors.map((each, i) => {
-        return { ...each._doc, key: i };
-      });
-      console.log('new class', newTrainer);
-      //  console.log("students", students);
+      
+      newTrainer.instructors = instructors;
+      // console.log('[new trainer]', newTrainer);
+      console.log("[ instructors ]", instructors);
+     
       res.json({
         success: true,
         instructors: instructors,
         newTrainer: newTrainer._doc,
-        message: 'Instructor(s) added successfully'
+        message: 'Instructor(s) assigned successfully'
       });
     } catch (err) {
       console.log(err);
