@@ -17,11 +17,15 @@ const Nodemailer = require('nodemailer');
 const Lowercase = require('lower-case');
 const xoauth2 = require('xoauth2');
 const generator = require('generate-password');
+const uniqid = require('uniqid');
 const assert = require('assert');
 const Helpers = require('../../helpers/index');
-//
+//const Invoice = require("nodeice");
 const ObjectId = mongoose.Types.ObjectId;
-
+const fs = require('fs'),
+  pdf = require('html-pdf'),
+  path = require('path'),
+  ejs = require('ejs');
 /**
  *Endpoint for registering admins *should allow checking if email was sent*
  **/
@@ -135,6 +139,140 @@ router.post(
 );
 
 /**
+ *Endpoint for adding parent to student already registered *should allow checking if email was sent*
+ **/
+
+router.post(
+  '/add_parent',
+  passport.authenticate('jwt', { session: false }),
+  async (req, res, next) => {
+    const { body, user } = req;
+    console.log(body);
+
+    let newUser = {
+      ...body.parent
+    };
+    if (body.existing) {
+      Student.findOneAndUpdate(
+        { _id: body._id },
+        { parent: body.parent },
+        {
+          new: true
+        }
+      )
+        .then(newUser => {
+          console.log('New Student', newUser);
+          newSchool = newUser.toObject();
+          res.status(200).json({
+            success: true,
+            user: newSchool,
+            message: 'User details updated!'
+          });
+        })
+        .catch(err => console.log(err));
+    } else {
+      let password = generator.generate({
+        length: 8,
+        numbers: true,
+        upercase: true,
+        symbol: true
+      });
+      let sendpasssword = password;
+
+      User.findOne({
+        $or: [{ email: body.parent.email }]
+      }).then(user => {
+        if (user) {
+          return res
+            .status(200)
+            .json({ success: false, message: 'Email is  already use!' });
+        } else {
+          const newUser = new User({
+            ...body.parent,
+            role: 'parent',
+            addedBy: req.user._id,
+            password: password
+          });
+
+          bcrypt.genSalt(10, (err, salt) => {
+            if (err) console.error('There was an error', err);
+            else {
+              bcrypt.hash(newUser.password, salt, (err, hash) => {
+                if (err) console.error('There was an error', err);
+                else {
+                  newUser.password = hash;
+                  newUser.save().then(async user => {
+                    await Student.findOneAndUpdate(
+                      { _id: body._id },
+                      { parent: user._id },
+                      {
+                        new: true
+                      }
+                    );
+
+                    const smtpTransport = Nodemailer.createTransport({
+                      host: 'smtp.gmail.com',
+                      port: 465,
+                      secure: true,
+                      auth: {
+                        type: 'OAuth2',
+                        user: 'devteamke2018@gmail.com',
+                        clientId:
+                          '719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com',
+                        clientSecret: 'I5wZkEJ--0dNg5slemh7R33Z',
+                        refreshToken:
+                          '1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs'
+                      }
+                    });
+                    let as;
+                    as =
+                      user.role.indexOf('-') > 0
+                        ? Helpers.capitalize(
+                            user.role.split('-')[0] +
+                              ' ' +
+                              Helpers.capitalize(user.role.split('-')[1])
+                          )
+                        : Helpers.capitalize(user.role);
+
+                    let mailOptions = {
+                      to: user.email,
+                      from: 'devteamke2018@gmail.com',
+                      subject: 'TotoSci Academy',
+                      html:
+                        '<h4>Hello ' +
+                        Helpers.capitalize(user.fname) +
+                        ',</h4>  You have been  added to TotoSci Academy  as a ' +
+                        as +
+                        '<p>Login with the following details: ' +
+                        '<p><b>Email</b>: ' +
+                        user.email +
+                        '</p><p> <b>Password</b>: ' +
+                        sendpasssword +
+                        '</p>'
+                    };
+                    smtpTransport.sendMail(mailOptions, (err, info) => {
+                      if (err) {
+                        return res
+                          .status(400)
+                          .json({ success: false, message: err.message });
+                      } else {
+                        return res.status(200).json({
+                          success: true,
+                          message: 'Details successfully updated!'
+                        });
+                      }
+                    });
+                  });
+                }
+              });
+            }
+          });
+        }
+      });
+    }
+  }
+);
+/**
  *Endpoint for registering parent and student *should allow checking if email was sent*
  **/
 
@@ -143,13 +281,14 @@ router.post(
   passport.authenticate('jwt', { session: false }),
   async (req, res, next) => {
     const { body } = req;
-    //console.log("[new_student ]", body);
+    console.log('[new_student body ]', body);
 
     let student = {
       fname: body.studentFname,
       lname: body.studentLname,
       school: body.school,
       gender: body.gender,
+      admissionNumber: body.admNo,
       DOB: body.DOB,
       isSponsored: body.isSponsored
     };
@@ -157,10 +296,12 @@ router.post(
     let parent = {
       fname: body.parentFname,
       lname: body.parentLname,
+      gender: body.parentGender,
       email: body.email,
       role: 'parent',
       phone_number: body.phone_number
     };
+    //  console.log('[parent to create]', parent);
 
     //const p=Lowercase(...body);
     //ddd
@@ -196,7 +337,7 @@ router.post(
         session.startTransaction();
       })
       .then(() => {
-        if (body.isSponsored) {
+        if (body.isSponsored || (body.addLater && !body.existingParent)) {
           return;
         } else if (body.existingParent) {
           return User.findById(body.existingParent).session(session);
@@ -208,7 +349,7 @@ router.post(
 
             .then(user => {
               if (user) {
-                throw new Error('email in use');
+                throw new Error('Email  already in use');
               } else {
                 let password = sendpasssword;
 
@@ -237,14 +378,40 @@ router.post(
         }
       })
 
-      .then(user => {
+      .then(async user => {
         //Create new student
-        //console.log("createdParent", user);
+        console.log('createdParent', user);
 
+        if (Array.isArray(user)) {
+          user = user[0];
+        }
+        let password = null;
+        if (body.mode == 'school-based') {
+          (password = body.admNo),
+            Promise.resolve()
+              .then(() => {
+                return bcrypt.genSalt(10).then(salt => {
+                  return { salt, password };
+                });
+              })
+              .then(obj => {
+                return bcrypt.hash(password, obj.salt).then(hash => {
+                  password = hash;
+                });
+              });
+        }
+        let schoolCode = await School.findOne({ _id: body.school });
+        schoolCode = schoolCode.school_code;
         return Student.create(
           [
             {
               ...student,
+              refID:
+                body.mode == 'school-based'
+                  ? 'TS' + schoolCode + body.admNo
+                  : 'TSHHRand',
+              username: body.admNo,
+              password,
               parent: user ? user._id : null,
               addedBy: req.user._id
             }
@@ -256,7 +423,7 @@ router.post(
       })
       .then(obj => {
         //add Student_id to parent
-        if (body.isSponsored) {
+        if (body.isSponsored || (body.addLater && !body.existingParent)) {
           return { student: obj.student };
         }
         //get parent session
@@ -288,7 +455,11 @@ router.post(
       .then(obj => {
         //create parent account
         //console.log("[created student]", obj.student);
-        if (body.isSponsored || body.existingParent) {
+        if (
+          body.isSponsored ||
+          body.existingParent ||
+          (body.addLater && !body.existingParent)
+        ) {
           return { student: obj.student };
         }
         return Parent.create(
@@ -317,9 +488,11 @@ router.post(
           student: obj.student /* student account*/
         };
       })
+
       .then(obj => {
+        console.log('[obj on send]', obj);
         //send email
-        if (body.isSponsored || body.existingParent) {
+        if (body.isSponsored || body.existingParent || body.addLater) {
           session.commitTransaction();
           return res.status(200).json({
             success: true,
@@ -383,12 +556,14 @@ router.post(
       })
       .catch(err => {
         session.abortTransaction();
-        //console.log(err);
+        console.log(err);
         //console.log(err.message);
         if (err.message == 'email in use') {
           return res
             .status(200)
             .json({ success: false, message: 'Email is  already use!' });
+        } else {
+          return res.status(200).json({ success: false, message: err.message });
         }
       });
   }
@@ -440,9 +615,21 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
-    body.name = Helpers.kebab(body.name);
+    let school = body[0];
+    let contact = body[1];
+    if (contact) {
+      console.log(contact);
+    }
+    let password = generator.generate({
+      length: 8,
+      numbers: true,
+      upercase: true,
+      symbol: true
+    });
+    let sendpasssword = password;
+    school.name = Helpers.kebab(school.name);
 
-    School.findOne({ name: { $regex: body.name, $options: 'i' } })
+    School.findOne({ name: { $regex: school.name, $options: 'i' } })
       .then(foundschool => {
         if (foundschool) {
           return res
@@ -450,13 +637,105 @@ router.post(
             .json({ success: false, message: 'School already exists' });
         } else {
           let newSchool = new School({
-            ...body,
+            ...school,
             addedBy: user._id
           });
           newSchool.save();
-          return res
-            .status(200)
-            .json({ success: true, message: 'New school added successfully ' });
+          return newSchool;
+        }
+      })
+      .then(school => {
+        if (school.school_type == 'school-based') {
+          User.findOne({
+            $or: [{ email: contact.email }]
+          }).then(user => {
+            if (user) {
+              School.findOneAndDelete({ name: school.name }).then();
+              return res
+                .status(200)
+                .json({ success: false, message: 'Email is  already use!' });
+            } else {
+              const newUser = new User({
+                ...contact,
+
+                addedBy: req.user._id,
+                password: password,
+                role: 'trainer'
+              });
+
+              bcrypt.genSalt(10, (err, salt) => {
+                if (err) console.error('There was an error', err);
+                else {
+                  bcrypt.hash(newUser.password, salt, (err, hash) => {
+                    if (err) console.error('There was an error', err);
+                    else {
+                      newUser.password = hash;
+                      newUser.save().then(user => {
+                        const smtpTransport = Nodemailer.createTransport({
+                          host: 'smtp.gmail.com',
+                          port: 465,
+                          secure: true,
+                          auth: {
+                            type: 'OAuth2',
+                            user: 'devteamke2018@gmail.com',
+                            clientId:
+                              '719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com',
+                            clientSecret: 'I5wZkEJ--0dNg5slemh7R33Z',
+                            refreshToken:
+                              '1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs'
+                          }
+                        });
+                        let as;
+                        as =
+                          user.role.indexOf('-') > 0
+                            ? Helpers.capitalize(
+                                user.role.split('-')[0] +
+                                  ' ' +
+                                  Helpers.capitalize(user.role.split('-')[1])
+                              )
+                            : Helpers.capitalize(user.role);
+
+                        let mailOptions = {
+                          to: user.email,
+                          from: 'devteamke2018@gmail.com',
+                          subject: 'TotoSci Academy',
+                          html:
+                            '<h4>Hello ' +
+                            Helpers.capitalize(user.fname) +
+                            ',</h4>  You have been  added to TotoSci Academy  as a ' +
+                            as +
+                            '<p>Login with the following details: ' +
+                            '<p><b>Email</b>: ' +
+                            user.email +
+                            '</p><p> <b>Password</b>: ' +
+                            sendpasssword +
+                            '</p>'
+                        };
+                        smtpTransport.sendMail(mailOptions, (err, info) => {
+                          if (err) {
+                            return res
+                              .status(400)
+                              .json({ success: false, message: err.message });
+                          } else {
+                            return res.status(200).json({
+                              success: true,
+                              message:
+                                'Registration successful.An email has been sent to the new user for login details!'
+                            });
+                          }
+                        });
+                      });
+                    }
+                  });
+                }
+              });
+            }
+          });
+        } else {
+          return res.status(403).json({
+            success: false,
+            message: 'School registered successfully'
+          });
         }
       })
 
@@ -558,6 +837,7 @@ router.post(
       });
   }
 );
+
 /**
  *Endpoint fo getting a paginated list of all users, *should only be accessible by admin and also omit the current user requesting *
  **/
@@ -637,7 +917,41 @@ router.post(
     const { user } = req;
 
     let ft = {};
+    const { sorter } = body;
+    const { filters } = body;
+    console.log('[filter]', filters);
 
+    let sort = { createdAt: -1 };
+    //Sorting
+    if (sorter) {
+      sort = { [sorter.field]: sorter.order == 'ascend' ? 1 : -1 };
+    }
+
+    //filtering
+    let filter = {};
+    if (filters) {
+      let filterKeys = Object.keys(filters);
+      filterKeys = filterKeys.map(key => {
+        let incArray = filters[key];
+     incArray =   incArray.map((each)=>{
+       if(each.length ==  '5d028b8808bfd305857b78d5'.length){
+        return mongoose.Types.ObjectId(each)
+       }else {
+         return each
+       }
+      
+        })
+        let obj = { $in: incArray };
+
+        if (incArray.length > 0) {
+          filter[key] = obj;
+        }
+
+        // console.log('[obj]', returnObj);
+      });
+    }
+    console.log('[ filter obj]', filter);
+    //Searching
     if (body.query) {
       ft = {
         $or: [
@@ -651,7 +965,10 @@ router.post(
     // 	//console.log('[filter]', ft);
     // //console.log('[type]', st);
     let aggregate = Student.aggregate()
-      .match(ft)
+      .match({
+        $and: [ft, filter]
+      })
+      .sort(sort)
       .lookup({
         from: 'users',
         let: { userId: '$addedBy' },
@@ -673,7 +990,7 @@ router.post(
         pipeline: [
           { $addFields: { pId: { $toObjectId: '$pId' } } },
           { $match: { $expr: { $eq: ['$_id', '$$pId'] } } },
-          { $project: { fname: 1, lname: 1 } }
+          { $project: { fname: 1, lname: 1, email: 1, phone: 1 } }
         ],
 
         as: 'parent'
@@ -695,11 +1012,13 @@ router.post(
       limit: body.limit
     })
       .then(result => {
+    
         //console.log("[results]", result);
-        res.status(200).json({ success: true, result: result });
+        res.status(200).json({ success: true, students: result });
       })
       .catch(err => {
-        //console.log(err);
+        console.log(err);
+        res.json({ success: false, message: err.message });
       });
   }
 );
@@ -714,7 +1033,7 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
-
+  
     let ft = {};
 
     if (body.query) {
@@ -773,17 +1092,134 @@ router.post(
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
+    Promise.resolve()
+      .then(() => {
+        //find normal
+        return School.find();
+      })
 
-    School.find()
-      .then(schools => {
-        console.log('found schools', schools);
-        res.status(200).json({ success: true, schools: schools });
+      .then(async schools => {
+        //console.log('[normal schools]', schools);
+        //find other
+        let schoolBased = await School.find({ school_type: 'school-based' });
+
+        // console.log('[schoolBased schools]', schoolBased);
+        res.status(200).json({ success: true, schools: schools, schoolBased });
       })
       .catch(err => {
         console.log(err);
       });
   }
 );
+
+/**
+*Endpoint for updating users
+
+**/
+
+router.patch(
+  '/update_user',
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    let _user = {
+      fname: body.fname,
+      lname: body.lname,
+      county: body.county,
+      sub_county: body.sub_county
+    };
+    console.log(body);
+
+    User.findOneAndUpdate({ _id: body._id }, _user, {
+      new: true
+    })
+      .then(newUser => {
+        console.log('New School', newUser);
+        newSchool = newUser.toObject();
+        res.status(200).json({
+          success: true,
+          user: newSchool,
+          message: 'User details updated!'
+        });
+      })
+      .catch(err => console.log(err));
+  }
+);
+/**
+*Endpoint forsending Invoice
+
+**/
+
+router.get('/send_invoice', async (req, res, next) => {
+  const { body } = req;
+  const { user } = req;
+
+  const smtpTransport = Nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      type: 'OAuth2',
+      user: 'devteamke2018@gmail.com',
+      clientId:
+        '719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com',
+      clientSecret: 'I5wZkEJ--0dNg5slemh7R33Z',
+      refreshToken: '1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs'
+    }
+  });
+  let exists = await fs.existsSync('Invoices' + '/invoice.pdf');
+  if (exists) {
+    await fs.unlinkSync('Invoices' + '/invoice.pdf');
+    //console.log("deleted");
+  }
+
+  var today = new Date();
+  var time = today.getHours();
+  let min = today.getMinutes();
+  let m = today.getSeconds();
+  let compiled = await ejs.compile(
+    fs.readFileSync('views' + '/invoice.ejs', 'utf8')
+  );
+  var html = await compiled({ email: 'kipkogeichirchir2@gmail.com' });
+  let pdfOptions = {
+    format: 'Letter',
+    orientation: 'landscape'
+  };
+  await pdf
+    .create(html, pdfOptions)
+    .toFile('Invoices' + '/invoice' + time + min + m + '.pdf', err => {
+      if (err) {
+        console.log(err);
+      } else {
+        console.log('pdf done');
+      }
+    });
+
+  let mailOptions = {
+    to: 'kipkogeichirchir2@gmail.com',
+    from: 'devteamke2018@gmail.com',
+    subject: 'TotoSci Academy',
+    attachments: [{ path: 'Invoices' + '/invoice.pdf' }]
+  };
+  smtpTransport.sendMail(mailOptions, async (err, info) => {
+    if (err) {
+      console.log('At send', err);
+      return res.status(400).json({ success: false, message: err.message });
+    } else {
+      //console.log("success");
+
+      res.render('invoice');
+      // await fs.unlinkSync("Invoices" + "/invoice.pdf");
+      return res.status(200).json({
+        success: true,
+        message: 'Registration of new student was successful'
+      });
+    }
+  });
+});
 /**
 *Endpoint for changing School details
 
@@ -829,7 +1265,7 @@ router.patch(
   Middleware.isChief,
   (req, res, next) => {
     const { body } = req;
-    //console.log(body);
+    console.log(body);
 
     // //console.log("[student]", student2);
     Student.findOneAndUpdate(
@@ -1318,4 +1754,87 @@ router.post(
   }
 );
 
+/**
+ *Endpoint for fetching students for invoice *
+ **/
+router.post(
+  '/fetch_invoiced_students',
+  passport.authenticate('jwt', { session: false }),
+  Middleware.isChief,
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    let ft = {};
+
+    if (body.query) {
+      ft = {
+        $and: [
+          {
+            isSponsored: false
+          },
+          {
+            $or: [
+              { fname: { $regex: body.query, $options: 'i' } },
+
+              { lname: { $regex: body.query, $options: 'i' } }
+            ]
+          }
+        ]
+      };
+    } else {
+      ft = {
+        isSponsored: false
+      };
+    }
+
+    // 	//console.log('[filter]', ft);
+    // //console.log('[type]', st);
+    let aggregate = Student.aggregate()
+      .match(ft)
+
+      .lookup({
+        from: 'users',
+        let: { pId: '$parent' },
+        pipeline: [
+          { $addFields: { pId: { $toObjectId: '$pId' } } },
+          { $match: { $expr: { $eq: ['$_id', '$$pId'] } } },
+          {
+            $project: {
+              fname: 1,
+              lname: 1,
+              email: 1,
+              phone_number: 1,
+              salutation: 1
+            }
+          }
+        ],
+
+        as: 'parent'
+      })
+      .lookup({
+        from: 'schools',
+        let: { schoolId: '$school' },
+        pipeline: [
+          { $addFields: { schoolId: { $toObjectId: '$schoolId' } } },
+          { $match: { $expr: { $eq: ['$_id', '$$schoolId'] } } },
+          { $project: { name: 1, county: 1, sub_county: 1 } }
+        ],
+
+        as: 'school'
+      });
+
+    Student.aggregatePaginate(aggregate, {
+      page: body.page,
+      limit: body.limit
+    })
+      .then(result => {
+        //console.log("[results]", result);
+        res.status(200).json({ success: true, students: result });
+      })
+      .catch(err => {
+        //console.log(err);
+      });
+  }
+);
 module.exports = router;

@@ -29,7 +29,7 @@ const PORT = process.env.PORT || 1111;
 const IP = process.env.IP || process.env.OPENSHIFT_NODEJS_IP || '0.0.0.0';
 // set the view engine to ejs
 app.set('view engine', 'ejs');
-
+app.set('views', __dirname + '/views');
 app.use(
   cors({
     origin: '*',
@@ -41,7 +41,7 @@ app.use(
 app.use(require('morgan')('dev'));
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname + '/public'));
 app.use(
   session({
     secret: 'LightBlog',
@@ -63,6 +63,7 @@ require('./models/Attendance');
 require('./models/Feedback');
 require('./models/Conversations');
 require('./models/Messages');
+require('./models/Contact');
 
 require('./passport')(passport);
 //io file

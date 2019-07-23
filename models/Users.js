@@ -19,7 +19,7 @@ const UsersSchema = new Schema({
   },
   gender: {
     type: String,
-    enum: ["male", "female", ],
+    enum: ["male", "female",],
   },
   DOB: {
     type: Date
@@ -131,7 +131,7 @@ const UsersSchema = new Schema({
   }
 }, { timestamps: true });
 
-UsersSchema.methods.toJSON = function() {
+UsersSchema.methods.toJSON = function () {
   return {
     _id: this._id,
     fname: this.fname,
@@ -172,19 +172,19 @@ UsersSchema.index({
   subcounty: "text",
   residence: "text"
 }, {
-  weights: {
-    email: 5,
-    fname: 4,
-    sname: 4,
-    idnumber: 5,
-    oname: 4,
-    county: 4,
-    subcounty: 4,
-    role: 3,
-    status: 2,
-    _id: 1
-  }
-});
+    weights: {
+      email: 5,
+      fname: 4,
+      sname: 4,
+      idnumber: 5,
+      oname: 4,
+      county: 4,
+      subcounty: 4,
+      role: 3,
+      status: 2,
+      _id: 1
+    }
+  });
 
 UsersSchema.plugin(mongoosePaginate);
 mongoose.model("Users", UsersSchema);

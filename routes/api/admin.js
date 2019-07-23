@@ -38,15 +38,15 @@ router.post('/register', passport.authenticate('jwt', { session: false }), Middl
 		User.findOne({
 				$or:[
 					 {email: body.email},
-					 {idNumber:body.idNumber}
+					
 					]
 		}).then(user => {
 			if(user) {
-				return res.status(200).json({success:false,message:'Email or ID Number is  already use!'});
+				return res.status(200).json({success:false,message:'Email  is  already use!'});
 			}else {
 				const newUser = new User({
 						...body,
-					salutation:body.salutation.toLowerCase(),
+				
 					addedBy:req.user._id,
 						password: password});
 				

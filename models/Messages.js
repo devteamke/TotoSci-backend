@@ -16,6 +16,11 @@ const MessagesSchema = new Schema(
       type: Schema.ObjectId,
       ref: 'Conversations'
     },
+    attachments: [
+      {
+        type: Object
+      }
+    ],
     read: {
       type: Boolean,
       default: false
@@ -31,6 +36,7 @@ MessagesSchema.methods.toJSON = function() {
     content: this.content,
     conversation: this.conversation,
     read: this.read,
+    attachments: this.attachments,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
   };

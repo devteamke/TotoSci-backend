@@ -1,39 +1,51 @@
-const mongoose = require("mongoose");
-const mongoosePaginate = require("mongoose-aggregate-paginate-v2");
+const mongoose = require('mongoose');
+const mongoosePaginate = require('mongoose-aggregate-paginate-v2');
 
 const { Schema } = mongoose;
 
-const StudentsSchema = new Schema({
-  fname: {
-    type: String
+const StudentsSchema = new Schema(
+  {
+    fname: {
+      type: String
+    },
+    lname: {
+      type: String
+    },
+    admNo: {
+      type: String
+    },
+    refID: {
+      type: String
+    },
+    school: { type: Schema.Types.ObjectId, ref: 'Schools' },
+    parent: {
+      type: Schema.Types.ObjectId,
+      ref: 'Users'
+    },
+    gender: {
+      type: String,
+      enum: ['male', 'female']
+    },
+    DOB: {
+      type: Date
+    },
+    isSponsored: Boolean,
+    status: {
+      type: String,
+      enum: ['active', 'suspended', 'expelled'],
+      default: 'active',
+      required: true
+    },
+    password: {
+      type: String
+    },
+    addedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'Users'
+    }
   },
-  lname: {
-    type: String
-  },
-  school: { type: Schema.Types.ObjectId, ref: "Schools" },
-  parent: {
-    type: Schema.Types.ObjectId,
-    ref: "Users"
-  },
-  gender: {
-    type: String,
-    enum: ["male", "female", ],
-  },
-  DOB: {
-    type: Date
-  },
-  isSponsored: Boolean,
-  status: {
-    type: String,
-    enum: ["active", "suspended", "expelled"],
-    default: "active",
-    required: true
-  },
-  addedBy: {
-    type: Schema.Types.ObjectId,
-    ref: "Users"
-  }
-}, { timestamps: true });
+  { timestamps: true }
+);
 
 StudentsSchema.methods.toJSON = function() {
   return {
@@ -41,11 +53,13 @@ StudentsSchema.methods.toJSON = function() {
     fname: this.fname,
     lname: this.lname,
     gender: this.gender,
+    admNo: this.admNo,
     DOB: this.DOB,
     status: this.status,
     isSponsored: this.isSponsored,
     parent: this.parent,
     school: this.school,
+    password: this.password,
 
     createdAt: this.createdAt,
     updatedAt: this.updatedAt
@@ -53,4 +67,4 @@ StudentsSchema.methods.toJSON = function() {
 };
 
 StudentsSchema.plugin(mongoosePaginate);
-mongoose.model("Students", StudentsSchema);
+mongoose.model('Students', StudentsSchema);

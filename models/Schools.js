@@ -14,6 +14,13 @@ const SchoolsSchema = new Schema(
     sub_county: {
       type: String
     },
+    school_type: {
+      type: String,
+      enum: ["supervised", "unsupervised", "school-based"]
+    },
+    school_code: {
+      type: String
+    },
     addedBy: {
       type: Schema.Types.ObjectId,
       ref: "Users"
@@ -22,7 +29,7 @@ const SchoolsSchema = new Schema(
   { timestamps: true }
 );
 
-SchoolsSchema.methods.toJSON = function() {
+SchoolsSchema.methods.toJSON = function () {
   return {
     _id: this._id,
     name: this.name,

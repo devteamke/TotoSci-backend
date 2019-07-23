@@ -4,17 +4,18 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const passport = require('passport');
 const User = mongoose.model('Users');
-
+const path = require('path');
 const Student = mongoose.model('Students');
 const Course = mongoose.model('Courses');
 const Conversation = mongoose.model('Conversations');
 const Message = mongoose.model('Messages');
-
+const uniqid = require('uniqid');
 const Middleware = require('../../Middleware/index');
 const Nodemailer = require('nodemailer');
 const xoauth2 = require('xoauth2');
 const generator = require('generate-password');
 const Helpers = require('../../helpers/index');
+const fs = require('fs');
 //form upload
 const formidable = require('formidable');
 
@@ -884,47 +885,159 @@ router.post(
   async (req, res, next) => {
     const { user } = req;
     const { body } = req;
-    let session = await Conversation.startSession();
+    const session = await Conversation.startSession();
     session.startTransaction();
+    //console.log('session', session);
     try {
-      console.log('body', body);
-      //check if recipient is valid
+      // const opts = { session };
+      //  console.log('body', body);
+
       let conversation = null;
       if (body.type == 'individual') {
-        let recipient = await User.findOne({ _id: body.to });
-        conversation = await Conversation.findOne({
-          $and: [
-            { participants: { $all: [body.to, req.user._id] } },
-            { subject: body.subject }
-          ]
-        });
-        //create new  conversation and use that to create new message
-        if (!conversation) {
-          conversation = await Conversation.create(
-            {
+        if (Array.isArray(body.to)) {
+          //create a new conversation for each,
+          let newConversations = [];
+          body.to.map(each => {
+            let individualConversation = {
               subject: body.subject,
               type: body.type,
-              participants: [body.to, req.user._id],
+              participants: [each._id, req.user._id],
               lastMessage: {
                 content: body.message,
                 sender: req.user._id,
                 read: false
               },
               addedBy: req.user._id
-            },
+            };
+            newConversations.push(individualConversation);
+          });
+
+          let savedNewConversations = await Conversation.create(
+            newConversations,
             { session: session }
           );
-          // console.log('new Conversation', conversation);
-          // console.log('new Conversation', req.io);
-          //req.io.join(conversation[0]._id);
-        } else {
-          conversation.lastMessage = {
-            content: body.message,
-            sender: req.user._id,
-            read: false
-          };
+          console.log('saved new before error');
+          // console.log('[saved newConversations]:', savedNewConversations);
+          //for attachments
+          let attachments = [];
+          if (body.attachments) {
+            if (body.attachments.length > 0) {
+              body.attachments.map(each => {
+                //move file to  uploads
+                if (each.response) {
+                  const source = fs.createReadStream(each.response.url);
+                  const dest = fs.createWriteStream(
+                    path.join(
+                      __dirname + '/../../public/uploads/' + each.response.file
+                    )
+                  );
 
-          await conversation.save();
+                  source.on('error', err => {
+                    throw newError(err);
+                  });
+                  source.pipe(dest);
+                  //create file objects
+                  let newAttachment = {
+                    name: each.name,
+                    type: each.type,
+                    file: each.response.file,
+                    size: each.size
+                  };
+                  attachments.push(newAttachment);
+                }
+              });
+            }
+          }
+
+          //create a new message for each
+          let newMessages = [];
+          savedNewConversations.map(each => {
+            let eachMessage = {
+              sender: req.user._id,
+              content: body.message,
+              conversation: each._id,
+              attachments: attachments
+            };
+            newMessages.push(eachMessage);
+          });
+
+          savedNewMessages = await Message.create(newMessages, {
+            session: session
+          });
+          console.log('[saved newMessages]:', savedNewMessages);
+          await Promise.all(
+            savedNewConversations.map(async each => {
+              console.log('each conversation', each);
+              let to;
+
+              if (each.participants[0] == each.addedBy) {
+                to = each.participants[1];
+              } else {
+                to = each.participants[0];
+              }
+              console.log('to id:] ', to);
+              let singleEmit = await Conversation.find({
+                $and: [
+                  {
+                    participants: { $in: to }
+                  },
+                  {
+                    'lastMessage.sender': { $ne: to }
+                  },
+                  {
+                    'lastMessage.read': false
+                  }
+                ]
+              })
+                .session(session)
+                .populate('participants', 'fname lname role')
+                .sort({ updatedAt: -1 })
+                .limit(10);
+              console.log('single emit', singleEmit);
+              req.io.sockets.to(to).emit('updateNotifications', singleEmit);
+              return new Promise((resolve, reject) => {
+                resolve();
+              });
+            })
+          );
+          //throw new Error('hehe');
+        } else {
+          //check if recipient is valid
+          let recipient = await User.findOne({ _id: body.to });
+          conversation = await Conversation.findOne({
+            $and: [
+              { participants: { $all: [body.to, req.user._id] } },
+              { subject: body.subject }
+            ]
+          });
+          //create new  conversation and use that to create new message
+          if (!conversation) {
+            conversation = await Conversation.create(
+              {
+                subject: body.subject,
+                type: body.type,
+                participants: [body.to, req.user._id],
+                lastMessage: {
+                  content: body.message,
+                  sender: req.user._id,
+                  read: false
+                },
+                addedBy: req.user._id
+              },
+              { session: session }
+            );
+            // console.log('new Conversation', conversation);
+            // console.log('new Conversation', req.io);
+            //req.io.join(conversation[0]._id);
+          } else {
+            conversation.lastMessage = {
+              content: body.message,
+              sender: req.user._id,
+              read: false
+            };
+
+            await conversation.save();
+          }
         }
       } else if (body.type == 'broadcast') {
         let recipients = await User.find({ role: body.to });
@@ -966,101 +1079,130 @@ router.post(
           await conversation.save();
         }
       }
+      //if body.to is not array
+      if (!Array.isArray(body.to)) {
+        //for attachments
+        let attachments = [];
+        if (body.attachments) {
+          if (body.attachments.length > 0) {
+            body.attachments.map(each => {
+              //move file to  uploads
+              if (each.response) {
+                const source = fs.createReadStream(each.response.url);
+                const dest = fs.createWriteStream(
+                  path.join(
+                    __dirname + '/../../public/uploads/' + each.response.file
+                  )
+                );
 
-      //Check if conversation exists depending on type
+                source.on('error', err => {
+                  throw newError(err);
+                });
+                source.pipe(dest);
+                //create file objects
+                let newAttachment = {
+                  name: each.name,
+                  type: each.type,
+                  file: each.response.file,
+                  size: each.size
+                };
+                attachments.push(newAttachment);
+              }
+            });
+          }
+        }
 
-      console.log('conversation', conversation);
-      let newMessage;
-      if (Array.isArray(conversation)) {
-        newMessage = await Message.create(
-          {
-            sender: req.user._id,
-            content: body.message,
-            conversation: conversation[0]._id
-          },
-          { session: session }
-        );
-      } else {
-        newMessage = await Message.create(
-          {
-            sender: req.user._id,
-            content: body.message,
-            conversation: conversation._id
-          },
-          { session: session }
-        );
-      }
+        console.log('attachments', attachments);
+        //  throw new Error('haha');
+        //Check if conversation exists depending on type
 
-      //console.log('new Message', newMessage);
-
-      //if existing use existing id to create message
-
-      let room;
-      if (Array.isArray(conversation)) {
-        room = conversation[0]._id;
-      } else {
-        room = conversation._id;
-      }
-      console.log('room', room);
-      if (body.type == 'individual') {
-        console.log('sending To', body.to);
-        req.io.sockets.to(body.to).emit('newMessage', newMessage);
-        req.io.sockets.to(req.user._id).emit('newMessage', newMessage);
-      }
-
-      //Emit to recipient
-      if (body.type == 'individual') {
-        //update notifications for recipient
-        let conversations = await Conversation.find({
-          $and: [
+        console.log('conversation', conversation);
+        let newMessage;
+        if (Array.isArray(conversation)) {
+          newMessage = await Message.create(
             {
-              participants: { $in: body.to }
+              sender: req.user._id,
+              content: body.message,
+              conversation: conversation[0]._id,
+              attachments: attachments
             },
+            { session: session }
+          );
+        } else {
+          newMessage = await Message.create(
             {
-              'lastMessage.sender': { $ne: body.to }
+              sender: req.user._id,
+              content: body.message,
+              conversation: conversation._id,
+              attachments: attachments
             },
-            {
-              'lastMessage.read': false
-            }
-          ]
-        })
-          .populate('participants', 'fname lname role')
-          .sort({ updatedAt: -1 })
-          .limit(10);
+            { session: session }
+          );
+        }
 
-        req.io.sockets.to(body.to).emit('updateNotifications', conversations);
-      } else if (body.type == 'broadcast') {
-        // //Emit to all  new broadcast
-        // let broadcasts = await Conversation.find({
-        //   $and: [
-        //     {
-        //       participants: { $all: recipients }
-        //     },
-        //     {
-        //       'lastMessage.sender': { $ne: body.to }
-        //     },
-        //     {
-        //       'lastMessage.read': false
-        //     }
-        //   ]
-        // })
-        //   .populate('participants', 'fname lname role')
-        //   .sort({ updatedAt: -1 })
-        //   .limit(10);
-        // req.io.sockets.to(body.to).emit('newBroadCast', broadcasts);
+        //console.log('new Message', newMessage);
+
+        //if existing use existing id to create message
+
+        if (body.type == 'individual') {
+          console.log('sending To', body.to);
+          req.io.sockets.to(body.to).emit('newMessage', newMessage);
+          req.io.sockets.to(req.user._id).emit('newMessage', newMessage);
+        }
+
+        //Emit to recipient
+        if (body.type == 'individual') {
+          //update notifications for recipient
+          let conversations = await Conversation.find({
+            $and: [
+              {
+                participants: { $in: body.to }
+              },
+              {
+                'lastMessage.sender': { $ne: body.to }
+              },
+              {
+                'lastMessage.read': false
+              }
+            ]
+          })
+            .populate('participants', 'fname lname role')
+            .sort({ updatedAt: -1 })
+            .limit(10);
+
+          req.io.sockets.to(body.to).emit('updateNotifications', conversations);
+        } else if (body.type == 'broadcast') {
+          // //Emit to all  new broadcast
+          // let broadcasts = await Conversation.find({
+          //   $and: [
+          //     {
+          //       participants: { $all: recipients }
+          //     },
+          //     {
+          //       'lastMessage.sender': { $ne: body.to }
+          //     },
+          //     {
+          //       'lastMessage.read': false
+          //     }
+          //   ]
+          // })
+          //   .populate('participants', 'fname lname role')
+          //   .sort({ updatedAt: -1 })
+          //   .limit(10);
+          // req.io.sockets.to(body.to).emit('newBroadCast', broadcasts);
+        }
       }
 
       await session.commitTransaction();
       session.endSession();
       res.json({
         success: true,
-        message: 'Your message was sent successfully',
-        newMessage
+        message: 'Your message was sent successfully'
       });
     } catch (err) {
       console.log(err.message);
       await session.abortTransaction();
-      session.endSession();
+      //  session.endSession();
       if (err.message.includes('Cast to ObjectId failed for value')) {
         res.json({
           success: false,
@@ -1279,25 +1421,27 @@ router.post(
   '/upload',
   passport.authenticate('jwt', { session: false }),
   async (req, res, next) => {
-    new formidable.IncomingForm().parse(req, (err, fields, files) => {
-      if (err) {
-        console.error('Error', err);
-        throw err;
-      }
-      console.log('Fields', fields);
-      console.log('Files', files.file);
-      //   files.map(file => {
-      //     console.log(file)
-      //   })
-      res.json({
-        name: files.file.name,
-        status: 'done',
-        url:
-          'https://zos.alipayobjects.com/rmsportal/jkjgkEfvpUPVyRjUImniVslZfWPnJuuZ.png',
-        thumbUrl:
-          'https://zos.alipayobjects.com/rmsportal/jkjgkEfvpUPVyRjUImniVslZfWPnJuuZ.png'
+    let newFileName;
+    new formidable.IncomingForm()
+      .parse(req)
+      .on('fileBegin', (name, file) => {
+        console.log('file ext ', path.extname(file.name));
+        newFileName = uniqid('file_') + path.extname(file.name);
+        console.log('old path', file.path);
+        file.path =
+          path.join(__dirname + '/../../public/uploads/tmp/') + newFileName;
+      })
+      .on('file', (name, file) => {
+        console.log('Uploaded file', name, file);
+        res.json({
+          name: file.name,
+          status: 'done',
+          url: file.path,
+          file: newFileName
+        });
       });
-    });
+
+    // });
   }
 );
 const parseUser = user => {
