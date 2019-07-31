@@ -6,9 +6,12 @@ const passport = require('passport');
 const User = mongoose.model('Users');
 const path = require('path');
 const Student = mongoose.model('Students');
+const School = mongoose.model("Schools");
 const Course = mongoose.model('Courses');
 const Conversation = mongoose.model('Conversations');
+const Application = mongoose.model('Applications');
 const Message = mongoose.model('Messages');
+const Request = mongoose.model("Requests");
 const uniqid = require('uniqid');
 const Middleware = require('../../Middleware/index');
 const Nodemailer = require('nodemailer');
@@ -51,7 +54,11 @@ router.post('/login', (req, res, next) => {
     }
     bcrypt.compare(password, user.password).then(isMatch => {
       if (isMatch) {
-        if (user.status !== 'active')
+        if (user.status == 'pending-approval')
+          return res
+            .status(200)
+            .json({ success: false, message: 'Your account is yet to be approved. It might take a while as your info has to be reviewed!' });
+        if (user.status == 'suspended')
           return res
             .status(200)
             .json({ success: false, message: 'Your account was suspended!' });
@@ -61,7 +68,7 @@ router.post('/login', (req, res, next) => {
           payload,
           'secret',
           {
-            expiresIn: 90000
+            expiresIn: 60 * 30
           },
           (err, token) => {
             if (err) console.error('There is some error in token', err);
@@ -1232,7 +1239,12 @@ router.post(
       });
       //Update read
       let conversation = await Conversation.findOneAndUpdate(
-        { _id: body.conversation },
+        {
+          $and: [
+            { _id: body.conversation },
+            { 'lastMessage.sender': { $ne: req.user._id } }
+          ]
+        },
         { 'lastMessage.read': true }
       );
       console.log('conversation', conversation);
@@ -1400,12 +1412,23 @@ router.post(
         .limit(10);
       let individual = [];
       let broadcasts = [];
+      let approvals = [];
+      if (req.user.role == "chief-trainer") {
+        approvals = await Request.find({
+          $and: [
+            { to: { $in: req.user._id } },
+            { response: null },
 
+          ]
+
+        }).populate('addedBy', 'fname lname role')
+      }
       //console.log(conversations);
       res.json({
         success: true,
         message: 'notifications fetched',
-        messages: messages
+        messages: messages,
+        approvals
       });
     } catch (err) {
       console.log(err.message);
@@ -1444,6 +1467,52 @@ router.post(
     // });
   }
 );
+router.post(
+  "/fetch_schools",
+
+
+  (req, res, next) => {
+    const { body } = req;
+    const { user } = req;
+
+    School.find()
+      .then(async schools => {
+        console.log(schools)
+        res.status(200).json({ success: true, schools: schools });
+      })
+      .catch(err => {
+        console.log(err);
+      });
+  }
+);
+router.post('/new_application', (req, res, next) => {
+  const { parent, student } = req.body;
+  //console.log(parent, student)
+  Application.find({ 'parent.email': parent.email })
+    .then((response) => {
+      if (response.length != 0) {
+        console.log(response)
+        res.status(200).json({ success: false, message: 'It seems you had mad a similar application' });
+      } else {
+        const newApplication = new Application({
+          parent: { ...parent, role: 'parent' },
+          student: { ...student }
+        })
+        newApplication.save()
+          .then(application => {
+            console.log(application)
+            res.status(200).json({ success: true, message: 'Your application has been submited' });
+          })
+
+      }
+
+    })
+    .catch(err => {
+      console.log(err);
+    })
+
+
+})
 const parseUser = user => {
   if (user.role == 'admin') {
     delete user.students;

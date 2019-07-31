@@ -1,24 +1,25 @@
-const mongoose = require('mongoose');
-const router = require('express').Router();
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const passport = require('passport');
-const User = mongoose.model('Users');
-const Student = mongoose.model('Students');
-const Course = mongoose.model('Courses');
-const Class = mongoose.model('Class');
-const Attendance = mongoose.model('Attendance');
-const Feedback = mongoose.model('Feedback');
-const Conversation = mongoose.model('Conversations');
-const Message = mongoose.model('Messages');
-const Middleware = require('../../Middleware/index');
-const Validator = require('validator');
-const Nodemailer = require('nodemailer');
-const Lowercase = require('lower-case');
-const xoauth2 = require('xoauth2');
-const generator = require('generate-password');
-const assert = require('assert');
-const Helpers = require('../../helpers/index');
+const mongoose = require("mongoose");
+const router = require("express").Router();
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const passport = require("passport");
+const User = mongoose.model("Users");
+const Student = mongoose.model("Students");
+const Course = mongoose.model("Courses");
+const Class = mongoose.model("Class");
+const Attendance = mongoose.model("Attendance");
+const Feedback = mongoose.model("Feedback");
+const Conversation = mongoose.model("Conversations");
+const Message = mongoose.model("Messages");
+const Request = mongoose.model("Requests");
+const Middleware = require("../../Middleware/index");
+const Validator = require("validator");
+const Nodemailer = require("nodemailer");
+const Lowercase = require("lower-case");
+const xoauth2 = require("xoauth2");
+const generator = require("generate-password");
+const assert = require("assert");
+const Helpers = require("../../helpers/index");
 //
 const ObjectId = mongoose.Types.ObjectId;
 //Add middlware isAdmin,
@@ -27,8 +28,8 @@ const ObjectId = mongoose.Types.ObjectId;
  *Endpoint for registering admins *should allow checking if email was sent*
  **/
 router.post(
-  '/register',
-  passport.authenticate('jwt', { session: false }),
+  "/register",
+  passport.authenticate("jwt", { session: false }),
   Middleware.isTrainer,
   (req, res, next) => {
     let { body } = req;
@@ -44,18 +45,19 @@ router.post(
     });
     let sendpasssword = password;
 
-    if (body.role == 'instructor') {
-      console.log('adding instructor');
+    if (body.role == "instructor") {
+      console.log("adding instructor");
 
       body = {
         ...body,
         trainerId: req.user._id,
         county: req.user.county,
         sub_county: req.user.sub_county,
-        school: req.user.school
+        school: req.user.school,
+        status: "pending-approval"
       };
     }
-    console.log('[instructor body]', body);
+    console.log("[instructor body]", body);
 
     let session = null;
 
@@ -73,7 +75,7 @@ router.post(
 
           .then(user => {
             if (user) {
-              throw new Error('Email is already in use');
+              throw new Error("Email is already in use");
             } else {
               let password = sendpasssword;
 
@@ -102,7 +104,7 @@ router.post(
       })
       .then(async instructor => {
         //Add instructor id to created trainer
-        console.log('created instructor', instructor);
+        console.log("created instructor", instructor);
         return User.findOne({ _id: req.user._id })
           .session(session)
           .then(trainer => {
@@ -113,62 +115,105 @@ router.post(
           });
       })
       .then(obj => {
-        console.log('object', obj);
+        console.log("object", obj);
         const user = obj.instructor[0];
         const smtpTransport = Nodemailer.createTransport({
-          host: 'smtp.gmail.com',
+          host: "smtp.gmail.com",
           port: 465,
           secure: true,
           auth: {
-            type: 'OAuth2',
-            user: 'devteamke2018@gmail.com',
+            type: "OAuth2",
+            user: "devteamke2018@gmail.com",
             clientId:
-              '719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com',
-            clientSecret: 'I5wZkEJ--0dNg5slemh7R33Z',
-            refreshToken: '1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs'
+              "719159077041-5ritn1ir75ic87p1gjo37c7gr5ko197m.apps.googleusercontent.com",
+            clientSecret: "I5wZkEJ--0dNg5slemh7R33Z",
+            refreshToken: "1/0qI_HzCYp26oqIfL49fuRVnayfAwf7VrOfav7ZK9IQs"
           }
         });
         let as;
         as =
-          user.role.indexOf('-') > 0
+          user.role.indexOf("-") > 0
             ? Helpers.capitalize(
-                user.role.split('-')[0] +
-                  ' ' +
-                  Helpers.capitalize(user.role.split('-')[1])
+                user.role.split("-")[0] +
+                  " " +
+                  Helpers.capitalize(user.role.split("-")[1])
               )
             : Helpers.capitalize(user.role);
 
         let mailOptions = {
           to: user.email,
-          from: 'devteamke2018@gmail.com',
-          subject: 'TotoSci Academy',
+          from: "devteamke2018@gmail.com",
+          subject: "TotoSci Academy",
           html:
-            '<h4>Hello ' +
+            "<h4>Hello " +
             Helpers.capitalize(user.fname) +
-            ',</h4>  You have been  added to TotoSci Academy  as a ' +
+            ",</h4>  You have been  added to TotoSci Academy  as a " +
             as +
-            '<p>Login with the following details: ' +
-            '<p><b>Email</b>: ' +
+            "<p>Login with the following details: " +
+            "<p><b>Email</b>: " +
             user.email +
-            '</p><p> <b>Password</b>: ' +
+            "</p><p> <b>Password</b>: " +
             sendpasssword +
-            '</p>'
+            "</p>"
         };
         smtpTransport.sendMail(mailOptions, (err, info) => {
           if (err) {
-            throw new Error('An error ocurred');
+            throw new Error("An error ocurred");
           } else {
             return;
           }
         });
-        return;
+        return obj;
+      })
+      .then(async obj => {
+        //Create and send approval request
+        let chiefIds = [];
+        let to = await User.find({ role: "chief-trainer" });
+        to = to.map(each => {
+          chiefIds.push( mongoose.Types.ObjectId(each._id.toString()));
+        });
+        console.log("ids", chiefIds);
+        let request = await Request.create(
+          [
+            {
+              subject: "New Instructor",
+              to: chiefIds,
+              additionalInfo: {
+                recordType: "User",
+                recordID: obj.instructor[0]._id,
+                record:obj.instructor[0]
+              },
+              response:null,
+              addedBy: req.user._id
+            }
+          ],
+          { session: session }
+        );
+        console.log("New Request", request);
+        //Update notification then send
+        await Promise.all(  chiefIds.map(async (each, i) => {
+          let singleEmit = await  Request.find({
+            $and:[
+              { to: { $in: each } },
+              { response: null },
+              
+         ]
+            
+          })  .session(session)
+
+          console.log('Single emit ',  i , singleEmit)
+          req.io.sockets.to(each).emit('updateApprovals', singleEmit);
+
+        }))
+      
+  
       })
       .then(() => {
         session.commitTransaction();
         return res.json({
           success: true,
           message:
-            'Registration of new instructor was successful. Login details have been sent to their email address'
+            "Registration of new instructor was successful. Login details have been sent to their email address"
         });
       })
       .catch(err => {
@@ -183,25 +228,55 @@ router.post(
  *Endpoint fo getting a paginated list of all instructors
  **/
 router.post(
-  '/all_instructors',
-  passport.authenticate('jwt', { session: false }),
+  "/all_instructors",
+  passport.authenticate("jwt", { session: false }),
   Middleware.isTrainer,
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
-    let st = [{ role: 'instructor' }];
+    const { sorter } = body;
+    const { filters } = body;
+    let st = [{ role: "instructor" }];
     let ft = {};
     let ids = req.user.instructors.map(each => {
       return mongoose.Types.ObjectId(each._id);
     });
+
+    let sort = { createdAt: -1 };
+    //Sorting
+    if (sorter) {
+      sort = { [sorter.field]: sorter.order == "ascend" ? 1 : -1 };
+    }
+    //filtering
+    let filter = {};
+    if (filters) {
+      let filterKeys = Object.keys(filters);
+      filterKeys = filterKeys.map(key => {
+        let incArray = filters[key];
+        incArray = incArray.map(each => {
+          if (each.length == "5d028b8808bfd305857b78d5".length) {
+            return mongoose.Types.ObjectId(each);
+          } else {
+            return each;
+          }
+        });
+        let obj = { $in: incArray };
+
+        if (incArray.length > 0) {
+          filter[key] = obj;
+        }
+
+        // console.log('[obj]', returnObj);
+      });
+    }
     if (body.query) {
       ft = {
         $or: [
-          { email: { $regex: body.query, $options: 'i' } },
-          { fname: { $regex: body.query, $options: 'i' } },
+          { email: { $regex: body.query, $options: "i" } },
+          { fname: { $regex: body.query, $options: "i" } },
 
-          { status: { $regex: body.query, $options: 'i' } },
-          { lname: { $regex: body.query, $options: 'i' } }
+          { status: { $regex: body.query, $options: "i" } },
+          { lname: { $regex: body.query, $options: "i" } }
         ]
       };
     }
@@ -216,30 +291,32 @@ router.post(
           {
             _id: { $ne: user._id }
           },
-          { _id: { $in: ids } }
+          { _id: { $in: ids } },
+          filter
         ]
       })
+      .sort(sort)
       .lookup({
-        from: 'users',
-        let: { userId: '$addedBy' },
+        from: "users",
+        let: { userId: "$addedBy" },
         pipeline: [
-          { $addFields: { userId: { $toObjectId: '$userId' } } },
-          { $match: { $expr: { $eq: ['$_id', '$$userId'] } } },
+          { $addFields: { userId: { $toObjectId: "$userId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
           { $project: { fname: 1, lname: 1 } }
         ],
 
-        as: 'addedBy'
+        as: "addedBy"
       })
       .lookup({
-        from: 'schools',
-        let: { schoolId: '$school' },
+        from: "schools",
+        let: { schoolId: "$school" },
         pipeline: [
-          { $addFields: { schoolId: { $toObjectId: '$schoolId' } } },
-          { $match: { $expr: { $eq: ['$_id', '$$schoolId'] } } },
+          { $addFields: { schoolId: { $toObjectId: "$schoolId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$schoolId"] } } },
           { $project: { name: 1, county: 1, sub_county: 1 } }
         ],
 
-        as: 'school'
+        as: "school"
       })
       .project({
         password: 0,
@@ -263,8 +340,8 @@ router.post(
  *Endpoint for adding new class
  **/
 router.post(
-  '/new_class',
-  passport.authenticate('jwt', { session: false }),
+  "/new_class",
+  passport.authenticate("jwt", { session: false }),
 
   (req, res, next) => {
     const { body } = req;
@@ -272,12 +349,12 @@ router.post(
     console.log(body);
     body.name = Helpers.kebab(body.name);
 
-    Class.findOne({ name: { $regex: body.name, $options: 'i' } })
+    Class.findOne({ name: { $regex: body.name, $options: "i" } })
       .then(foundclass => {
         if (foundclass) {
           return res
             .status(403)
-            .json({ success: false, message: 'Class already exists' });
+            .json({ success: false, message: "Class already exists" });
         } else {
           let newSchool = new Class({
             ...body,
@@ -288,7 +365,7 @@ router.post(
           newSchool.save();
           return res
             .status(200)
-            .json({ success: true, message: 'New class added successfully ' });
+            .json({ success: true, message: "New class added successfully " });
         }
       })
 
@@ -303,8 +380,8 @@ router.post(
  *Endpoint fo getting a paginated list of all class
  **/
 router.post(
-  '/all_classes',
-  passport.authenticate('jwt', { session: false }),
+  "/all_classes",
+  passport.authenticate("jwt", { session: false }),
 
   (req, res, next) => {
     const { body } = req;
@@ -316,10 +393,10 @@ router.post(
       body.query = Helpers.kebab(body.query);
       ft = {
         $or: [
-          { name: { $regex: body.query, $options: 'i' } },
-          { course: { $regex: body.query, $options: 'i' } },
+          { name: { $regex: body.query, $options: "i" } },
+          { course: { $regex: body.query, $options: "i" } },
 
-          { day: { $regex: body.query, $options: 'i' } }
+          { day: { $regex: body.query, $options: "i" } }
         ]
       };
     }
@@ -330,30 +407,30 @@ router.post(
       .match({ $and: [{ trainer: user._id }, ft] })
 
       .lookup({
-        from: 'users',
-        let: { userId: '$trainer' },
+        from: "users",
+        let: { userId: "$trainer" },
         pipeline: [
-          { $addFields: { userId: { $toObjectId: '$userId' } } },
-          { $match: { $expr: { $eq: ['$_id', '$$userId'] } } },
+          { $addFields: { userId: { $toObjectId: "$userId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
           { $project: { fname: 1, lname: 1 } }
         ],
 
-        as: 'addedBy'
+        as: "addedBy"
       })
       .project({
         password: 0,
         isSetUp: 0
       })
       .lookup({
-        from: 'courses',
-        let: { courseId: '$course' },
+        from: "courses",
+        let: { courseId: "$course" },
         pipeline: [
-          { $addFields: { courseId: { $toObjectId: '$courseId' } } },
-          { $match: { $expr: { $eq: ['$_id', '$$courseId'] } } },
+          { $addFields: { courseId: { $toObjectId: "$courseId" } } },
+          { $match: { $expr: { $eq: ["$_id", "$$courseId"] } } },
           { $project: { name: 1 } }
         ],
 
-        as: 'courseName'
+        as: "courseName"
       });
 
     Class.aggregatePaginate(aggregate, {
@@ -361,7 +438,7 @@ router.post(
       limit: body.limit
     })
       .then(result => {
-        console.log('[results]', result);
+        console.log("[results]", result);
         res.status(200).json({ success: true, result: result });
       })
       .catch(err => {
@@ -374,8 +451,8 @@ router.post(
  **/
 
 router.patch(
-  '/password',
-  passport.authenticate('jwt', { session: false }),
+  "/password",
+  passport.authenticate("jwt", { session: false }),
   Middleware.isTrainer,
   (req, res, next) => {
     const { body } = req;
@@ -383,13 +460,13 @@ router.patch(
     let password = body.password;
 
     bcrypt.genSalt(10, (err, salt) => {
-      if (err) console.error('There was an error', err);
+      if (err) console.error("There was an error", err);
       else {
         bcrypt.hash(password, salt, (err, hash) => {
           if (err)
             return res.json({
               success: false,
-              message: 'Failed to update password!'
+              message: "Failed to update password!"
             });
           else {
             User.findOneAndUpdate(
@@ -398,14 +475,14 @@ router.patch(
               { new: true, projection: { password: 0 } }
             )
               .then(user => {
-                console.log('{new}', user);
+                console.log("{new}", user);
 
-                res.json({ success: true, message: 'User password updated!' });
+                res.json({ success: true, message: "User password updated!" });
               })
               .catch(err =>
                 res.json({
                   success: false,
-                  message: 'Failed to update password!'
+                  message: "Failed to update password!"
                 })
               );
           }
@@ -421,8 +498,8 @@ router.patch(
 **/
 
 router.patch(
-  '/save_profile',
-  passport.authenticate('jwt', { session: false }),
+  "/save_profile",
+  passport.authenticate("jwt", { session: false }),
   Middleware.isTrainer,
   (req, res, next) => {
     const { user } = req.body;
@@ -432,18 +509,18 @@ router.patch(
     delete user2.createdAt;
     delete user2._id;
     delete user2.__v;
-    console.log('[user]', user);
+    console.log("[user]", user);
     User.findOneAndUpdate({ _id: user._id }, user2, {
       new: true,
       projection: { password: 0, __v: 0 }
     })
       .then(newUser => {
-        console.log('{new}', newUser);
+        console.log("{new}", newUser);
         newUser = newUser.toObject();
         res.json({
           success: true,
           user: newUser,
-          message: 'User info updated!'
+          message: "User info updated!"
         });
       })
       .catch(err => console.log(err));
@@ -456,11 +533,11 @@ router.patch(
 **/
 
 router.post(
-  '/fetch_courses',
-  passport.authenticate('jwt', { session: false }),
+  "/fetch_courses",
+  passport.authenticate("jwt", { session: false }),
   (req, res, next) => {
     Course.find().then(courses => {
-      console.log('courses', courses);
+      console.log("courses", courses);
 
       return res.json({
         success: true,
@@ -475,17 +552,17 @@ router.post(
 **/
 
 router.post(
-  '/fetch_students',
-  passport.authenticate('jwt', { session: false }),
+  "/fetch_students",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
-    console.log('body', body);
+    console.log("body", body);
     try {
       let ids = body._class.students.map(each => {
         return mongoose.Types.ObjectId(each);
       });
       //Not in the class
-      console.log('ids', ids);
+      console.log("ids", ids);
       let students;
 
       if (!body.inClass) {
@@ -504,7 +581,7 @@ router.post(
       students = students.map((each, i) => {
         return { ...each._doc, key: i };
       });
-      console.log('students', students);
+      console.log("students", students);
       res.json({ success: true, students });
     } catch (err) {
       console.log(err);
@@ -520,8 +597,8 @@ router.post(
 **/
 
 router.post(
-  '/add_students_to_class',
-  passport.authenticate('jwt', { session: false }),
+  "/add_students_to_class",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
     try {
@@ -545,13 +622,13 @@ router.post(
       students = students.map((each, i) => {
         return { ...each._doc, key: i };
       });
-      console.log('new class', newClass);
+      console.log("new class", newClass);
       //  console.log("students", students);
       res.json({
         success: true,
         students: students,
         newClass: newClass._doc,
-        message: 'Students added successfully'
+        message: "Students added successfully"
       });
     } catch (err) {
       console.log(err);
@@ -566,8 +643,8 @@ router.post(
 **/
 
 router.post(
-  '/remove_students',
-  passport.authenticate('jwt', { session: false }),
+  "/remove_students",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
     try {
@@ -591,13 +668,13 @@ router.post(
       students = students.map((each, i) => {
         return { ...each._doc, key: i };
       });
-      console.log('new class', newClass);
+      console.log("new class", newClass);
       //  console.log("students", students);
       res.json({
         success: true,
         students: students,
         newClass: newClass._doc,
-        message: 'Students removed successfully'
+        message: "Students removed successfully"
       });
     } catch (err) {
       console.log(err);
@@ -612,8 +689,8 @@ router.post(
 **/
 
 router.post(
-  '/mark_attendance',
-  passport.authenticate('jwt', { session: false }),
+  "/mark_attendance",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
     try {
@@ -628,11 +705,11 @@ router.post(
       // Get absent
       //   let absent = class_ids.filter(x => !attended_ids.includes(x));
 
-      console.log('attended:', present.length);
+      console.log("attended:", present.length);
       // console.log("class:", class_ids.length);
 
       const { values } = body;
-      console.log('[values]', values);
+      console.log("[values]", values);
       let attendance = {
         ...values,
         _class: body._class._id,
@@ -640,11 +717,11 @@ router.post(
       };
 
       let savedAtt = await Attendance.create(attendance);
-      console.log('saved', savedAtt);
+      console.log("saved", savedAtt);
       res.json({
         success: true,
 
-        message: 'Attendance  updated successfully'
+        message: "Attendance  updated successfully"
       });
       // let newClass = await Class.findOneAndUpdate(
       //   { _id: body.class_id },
@@ -683,8 +760,8 @@ router.post(
 **/
 
 router.post(
-  '/fetch_attendance',
-  passport.authenticate('jwt', { session: false }),
+  "/fetch_attendance",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
     try {
@@ -700,7 +777,7 @@ router.post(
         }
       });
       //console.log("[ lessons ]", lessons);
-      console.log('[ students ]', students.length);
+      console.log("[ students ]", students.length);
       let attendance = [];
       students.map((student, i) => {
         let data = {
@@ -708,7 +785,7 @@ router.post(
           _id: student._id,
           name:
             Helpers.capitalize(student.fname) +
-            ' ' +
+            " " +
             Helpers.capitalize(student.lname)
         };
         let l = {};
@@ -716,7 +793,7 @@ router.post(
           //console.log(lesson.present.indexOf(student._id) > 0);
           if (lesson.present.indexOf(student._id) > -1) {
             //attended
-            l[i + 1] = '<b>true</b>';
+            l[i + 1] = "<b>true</b>";
           } else {
             //missed
             l[i + 1] = false;
@@ -725,29 +802,29 @@ router.post(
         data = { ...data, ...l };
         attendance.push(data);
       });
-      console.log('[ attendance ]', attendance);
+      console.log("[ attendance ]", attendance);
       let columnsA = [];
       if (attendance.length > 0) {
         let keys = Object.keys(attendance[0]);
 
         keys.map(key => {
           let e = {};
-          if (key == 'key') {
+          if (key == "key") {
             return;
           }
-          if (key == '_id') {
+          if (key == "_id") {
             return;
           }
-          if (key == 'name') {
+          if (key == "name") {
             return;
             columnsA.unshift({
-              title: 'Name',
+              title: "Name",
               dataIndex: key
             });
             return;
           }
           columnsA.push({
-            title: 'Lesson ' + key,
+            title: "Lesson " + key,
             dataIndex: key
           });
         });
@@ -758,7 +835,7 @@ router.post(
         success: true,
         attendance,
         columnsA,
-        message: 'Attendance  fetched successfully'
+        message: "Attendance  fetched successfully"
       });
     } catch (err) {
       console.log(err);
@@ -773,11 +850,11 @@ router.post(
 **/
 
 router.post(
-  '/fetch_instructors',
-  passport.authenticate('jwt', { session: false }),
+  "/fetch_instructors",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
-    console.log('body', body);
+    console.log("body", body);
     try {
       let ids = body._class.instructors.map(each => {
         return mongoose.Types.ObjectId(each);
@@ -786,7 +863,7 @@ router.post(
         return mongoose.Types.ObjectId(each._id);
       });
       //Not in the class
-      console.log('ids', ids);
+      console.log("ids", ids);
       let instructors = await User.find({
         $and: [
           {
@@ -794,7 +871,7 @@ router.post(
               $nin: ids
             }
           },
-          { role: 'instructor' },
+          { role: "instructor" },
           { _id: { $in: ids2 } }
         ]
       });
@@ -802,7 +879,7 @@ router.post(
       instructors = instructors.map((each, i) => {
         return { ...each._doc, key: i };
       });
-      console.log('students', instructors);
+      console.log("students", instructors);
       res.json({ success: true, instructors });
     } catch (err) {
       console.log(err);
@@ -816,15 +893,15 @@ router.post(
 **/
 
 router.post(
-  '/fetch_instructor_class',
-  passport.authenticate('jwt', { session: false }),
+  "/fetch_instructor_class",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
     // console.log("body", body);
     try {
       let id = body._id;
       //Not in the class
-      console.log('ids', id);
+      console.log("ids", id);
       let classes = await Class.find({ instructors: { $in: [id] } });
 
       //console.log("Classes", classes);
@@ -832,7 +909,7 @@ router.post(
       classes = classes.map((each, i) => {
         return { ...each._doc, key: i };
       });
-      console.log('Classes', classes);
+      console.log("Classes", classes);
       res.json({ success: true, _class: classes });
     } catch (err) {
       console.log(err);
@@ -846,17 +923,17 @@ router.post(
 **/
 
 router.post(
-  '/fetch_class_instructors',
-  passport.authenticate('jwt', { session: false }),
+  "/fetch_class_instructors",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
-    console.log('body', body);
+    console.log("body", body);
     try {
       let ids = body._class.instructors.map(each => {
         return mongoose.Types.ObjectId(each);
       });
       //in the class
-      console.log('ids', ids);
+      console.log("ids", ids);
       let instructors = await User.find({
         $and: [
           {
@@ -864,7 +941,7 @@ router.post(
               $in: ids
             }
           },
-          { role: 'instructor' }
+          { role: "instructor" }
         ]
       });
 
@@ -887,8 +964,8 @@ router.post(
 **/
 
 router.post(
-  '/add_instructors_to_class',
-  passport.authenticate('jwt', { session: false }),
+  "/add_instructors_to_class",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
     try {
@@ -916,19 +993,19 @@ router.post(
               $in: newClass.instructors
             }
           },
-          { role: 'instructor' }
+          { role: "instructor" }
         ]
       });
       instructors = instructors.map((each, i) => {
         return { ...each._doc, key: i };
       });
-      console.log('new class', newClass);
+      console.log("new class", newClass);
       //  console.log("students", students);
       res.json({
         success: true,
         instructors: instructors,
         newClass: newClass._doc,
-        message: 'Instructor(s) added successfully'
+        message: "Instructor(s) added successfully"
       });
     } catch (err) {
       console.log(err);
@@ -943,11 +1020,11 @@ router.post(
 **/
 
 router.post(
-  '/remove_instructor',
-  passport.authenticate('jwt', { session: false }),
+  "/remove_instructor",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
-    console.log('body', body);
+    console.log("body", body);
     try {
       let id = body.instructor._id;
 
@@ -976,7 +1053,7 @@ router.post(
         return mongoose.Types.ObjectId(each);
       });
       //in the class
-      console.log('ids', ids);
+      console.log("ids", ids);
       let instructors = await User.find({
         $and: [
           {
@@ -984,16 +1061,16 @@ router.post(
               $in: ids
             }
           },
-          { role: 'instructor' }
+          { role: "instructor" }
         ]
       });
-      console.log('new class', newClass);
+      console.log("new class", newClass);
       //  console.log("students", students);
       res.json({
         success: true,
         instructors: instructors,
         newClass: newClass._doc,
-        message: 'Instructor removed successfully'
+        message: "Instructor removed successfully"
       });
     } catch (err) {
       console.log(err);
@@ -1008,8 +1085,8 @@ router.post(
 **/
 
 router.post(
-  '/fetch_feed_attendance',
-  passport.authenticate('jwt', { session: false }),
+  "/fetch_feed_attendance",
+  passport.authenticate("jwt", { session: false }),
   async (req, res, next) => {
     const { body } = req;
     let student = body.student;
@@ -1024,7 +1101,7 @@ router.post(
         _id: student._id,
         name:
           Helpers.capitalize(student.fname) +
-          ' ' +
+          " " +
           Helpers.capitalize(student.lname)
       };
       let l = {};
@@ -1034,10 +1111,10 @@ router.post(
 
         if (lesson.present.indexOf(student._id) > -1) {
           //attended
-          l[i + 1] = i + 1 + 'true';
+          l[i + 1] = i + 1 + "true";
         } else {
           //missed
-          l[i + 1] = i + 1 + 'false';
+          l[i + 1] = i + 1 + "false";
         }
         larr.push(l[i + 1]);
       });
@@ -1046,16 +1123,16 @@ router.post(
         student: student._id,
         _class: body._class._id
       })
-        .populate({ path: 'addedBy', select: 'fname lname' })
+        .populate({ path: "addedBy", select: "fname lname" })
         .sort({
           createdAt: -1
         });
-      console.log('feedback', feedback);
+      console.log("feedback", feedback);
       res.json({
         success: true,
         attendance: larr,
         feedback: feedback,
-        message: 'Attendance  fetched successfully'
+        message: "Attendance  fetched successfully"
       });
     } catch (err) {
       console.log(err);
@@ -1068,15 +1145,15 @@ router.post(
  *Endpoint for recipients*
  **/
 router.post(
-  '/fetch_recipients',
-  passport.authenticate('jwt', { session: false }),
+  "/fetch_recipients",
+  passport.authenticate("jwt", { session: false }),
   Middleware.isTrainer,
   (req, res, next) => {
     const { body } = req;
     const { user } = req;
 
     User.find({
-      $or: [{ role: 'chief-trainer' }, { _id: { $in: user.instructors } }]
+      $or: [{ role: "chief-trainer" }, { _id: { $in: user.instructors } }]
     })
       .then(result => {
         return result.map(each => {
@@ -1097,8 +1174,8 @@ router.post(
  *Endpoint for fetching  conversations*
  **/
 router.post(
-  '/fetch_messages',
-  passport.authenticate('jwt', { session: false }),
+  "/fetch_messages",
+  passport.authenticate("jwt", { session: false }),
   Middleware.isTrainer,
   async (req, res, next) => {
     const { body } = req;
@@ -1113,15 +1190,15 @@ router.post(
         },
         {
           $lookup: {
-            from: 'users',
-            let: { participants: '$participants' },
+            from: "users",
+            let: { participants: "$participants" },
             pipeline: [
-              { $addFields: { participants: '$participants' } },
-              { $match: { $expr: { $in: ['$_id', '$$participants'] } } },
+              { $addFields: { participants: "$participants" } },
+              { $match: { $expr: { $in: ["$_id", "$$participants"] } } },
               { $project: { fname: 1, lname: 1, role: 1 } }
             ],
 
-            as: 'participantsFull'
+            as: "participantsFull"
           }
         },
         { $sort: { createdAt: -1 } }
@@ -1130,25 +1207,25 @@ router.post(
       let individual = [];
       let broadcasts = [];
       conversations = conversations.map(each => {
-        if (each.type == 'individual') {
+        if (each.type == "individual") {
           if (
             each.participantsFull[0]._id.toString() == req.user._id.toString()
           ) {
             each.recipient =
               Helpers.capitalize(each.participantsFull[1].fname) +
-              ' ' +
+              " " +
               Helpers.capitalize(each.participantsFull[1].lname) +
-              ' -(' +
+              " -(" +
               Helpers.capitalize(each.participantsFull[1].role) +
-              ')';
+              ")";
           } else {
             each.recipient =
               Helpers.capitalize(each.participantsFull[0].fname) +
-              ' ' +
+              " " +
               Helpers.capitalize(each.participantsFull[0].lname) +
-              ' -(' +
+              " -(" +
               Helpers.capitalize(each.participantsFull[0].role) +
-              ')';
+              ")";
           }
           individual.push(each);
         } else {

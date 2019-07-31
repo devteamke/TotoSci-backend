@@ -24,6 +24,10 @@ const SchoolsSchema = new Schema(
     addedBy: {
       type: Schema.Types.ObjectId,
       ref: "Users"
+    },
+    contact: {
+      type: Schema.Types.ObjectId,
+      ref: "Users"
     }
   },
   { timestamps: true }
